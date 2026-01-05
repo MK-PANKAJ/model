@@ -27,7 +27,7 @@ jobs:
 
     - name: Run Backend Tests
       run: |
-        pytest tests/test_api.py
+        python -m pytest tests/test_api.py
 
     # --- FRONTEND BUILD CHECK ---
     - name: Set up Node.js
