@@ -43,19 +43,28 @@ sentinel = Sentinel()
 from modules.security import get_password_hash
 @app.on_event("startup")
 def create_default_admin():
-    db = SessionLocal()
+    print("--- STARTUP: Initializing Admin User ---")
     try:
-        user = db.query(UserDB).filter(UserDB.username == "admin").first()
-        if not user:
-            print("Creating default admin user...")
-            hashed_pw = get_password_hash("password123")
-            admin = UserDB(username="admin", hashed_password=hashed_pw)
-            db.add(admin)
-            db.commit()
-    except Exception as e:
-        print(f"Startup Admin Creation Failed: {e}")
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            user = db.query(UserDB).filter(UserDB.username == "admin").first()
+            if not user:
+                print("Creating default admin user...")
+                hashed_pw = get_password_hash("password123")
+                admin = UserDB(username="admin", hashed_password=hashed_pw)
+                db.add(admin)
+                db.commit()
+                print("Admin user created successfully.")
+            else:
+                print("Admin user already exists.")
+        except Exception as e:
+            print(f"Startup DB Error: {e}")
+            # Do NOT raise, just log it so the app can still start
+        finally:
+            db.close()
+    except Exception as outer_e:
+        print(f"Startup Critical Error: {outer_e}")
+    print("--- STARTUP: Complete ---")
 
 # --- DATA MODELS ---
 # --- AUTH ENDPOINT ---
