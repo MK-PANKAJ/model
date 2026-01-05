@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import API from './config';
+
 export default function Login({ onLogin }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -16,11 +18,8 @@ export default function Login({ onLogin }) {
         formData.append('username', username);
         formData.append('password', password);
 
-        // Determine API URL (Local vs Cloud)
-        // In production we use the cloud URL hardcoded or relative if same domain, 
-        // but for this hybrid setup we use the one established in App.jsx or defaults
-        const API_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/token";
-        // ^ Ideally this comes from config, but keeping it simple for MVP phase.
+        // API URL (Dynamic from config.js)
+        const API_URL = API.LOGIN;
 
         try {
             const response = await fetch(API_URL, {

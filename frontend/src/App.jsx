@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import CaseCard from './components/CaseCard';
 import Login from './Login';
+import API from './config';
 
 // MOCK DATA SIMULATING THE ERP
 const MOCK_CASES = [
@@ -50,7 +51,7 @@ function App() {
   const runAnalysis = async () => {
     setLoading(true);
     const results = [];
-    const API_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/analyze";
+    const API_URL = API.ANALYZE;
 
     try {
       for (let c of MOCK_CASES) {
@@ -103,7 +104,7 @@ function App() {
     const formData = new FormData();
     formData.append("file", file);
 
-    const UPLOAD_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/ingest";
+    const UPLOAD_URL = API.INGEST;
 
     try {
       const response = await fetch(UPLOAD_URL, {
@@ -126,7 +127,7 @@ function App() {
   };
 
   const handlePayment = async (caseData) => {
-    const PAYMENT_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/payment/create";
+    const PAYMENT_URL = API.PAYMENT;
 
     try {
       const response = await fetch(PAYMENT_URL, {
