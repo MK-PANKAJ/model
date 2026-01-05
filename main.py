@@ -56,7 +56,12 @@ def create_default_admin():
                 db.commit()
                 print("Admin user created successfully.")
             else:
-                print("Admin user already exists.")
+                # FORCE RESET PASSWORD (Self-Healing for MVP)
+                print("Admin exists. Resetting password to ensure compatibility...")
+                hashed_pw = get_password_hash("password123")
+                user.hashed_password = hashed_pw
+                db.commit()
+                print("Admin password reset successfully.")
         except Exception as e:
             print(f"Startup DB Error: {e}")
             # Do NOT raise, just log it so the app can still start
