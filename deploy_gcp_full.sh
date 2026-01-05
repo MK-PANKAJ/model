@@ -20,7 +20,7 @@ echo "Using Project: $PROJECT_ID"
 
 # 1. ENABLE GOOGLE CLOUD APIS
 echo "--> Enabling APIs..."
-gcloud services enable run.googleapis.com sqladmin.googleapis.com cloudbuild.googleapis.com
+gcloud services enable run.googleapis.com sqladmin.googleapis.com cloudbuild.googleapis.com aiplatform.googleapis.com
 
 # 2. CREATE CLOUD SQL INSTANCE (The Persistent Database)
 echo "--> Creating Cloud SQL Instance (This takes ~5 mins)..."
