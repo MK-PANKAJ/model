@@ -33,35 +33,41 @@ function App() {
   const [analyzedCases, setAnalyzedCases] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // SIMULATE API CALL (To Python Backend)
-  // In real life, this fetches from http://localhost:8000/api/v1/analyze
+  // LIVE API CALL (To Google Cloud Run)
   const runAnalysis = async () => {
     setLoading(true);
     const results = [];
-    
-    // We simulate the API call latency and logic here for the demo
-    // since we might not have the Python server running strictly on port 8000 in this view
-    for (let c of MOCK_CASES) {
-       // Mocking the Backend Response based on our known logic
-       // High interaction + Low Age = High Score
-       let score = c.age_days > 30 ? 0.45 : 0.88; 
-       if(c.companyName === "Global Trade Ltd") score = 0.42;
-       
-       let action = score > 0.7 ? "ALLOCATE_DIGITAL" : "ALLOCATE_AGENCY";
-       
-       results.push({
-         ...c,
-         pScore: score,
-         suggestedAction: action,
-         riskLevel: "LOW", // Default
-         violationTag: ""
-       });
+    const API_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/analyze";
+
+    try {
+      for (let c of MOCK_CASES) {
+        // We send the mock case structure to the REAL brain
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(c)
+        });
+
+        if (!response.ok) throw new Error("API Connection Failed");
+
+        const data = await response.json();
+
+        // Merge the AI Brain result with our Case Data
+        results.push({
+          ...c,
+          pScore: data.riskon_score,
+          suggestedAction: data.allocation_decision.action,
+          riskLevel: "LOW", // Sentinel default
+          violationTag: ""
+        });
+      }
+    } catch (err) {
+      console.error("Cloud Connection Error:", err);
+      alert("Failed to connect to Cloud Backend. Is it running?");
     }
-    
-    setTimeout(() => {
-      setAnalyzedCases(results.sort((a,b) => b.pScore - a.pScore)); // Sort by Priority
-      setLoading(false);
-    }, 800);
+
+    setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
+    setLoading(false);
   };
 
   return (
@@ -72,7 +78,7 @@ function App() {
       </header>
 
       <div className="mb-6">
-        <button 
+        <button
           onClick={runAnalysis}
           disabled={loading}
           className="bg-indigo-600 text-white px-6 py-2 rounded-lg shadow hover:bg-indigo-700 transition"

@@ -18,6 +18,17 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="RecoverAI Core API", version="1.0.0")
 
+# --- CORS MIDDLEWARE (Required for Cloud/Frontend Integration) ---
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all origins for MVP
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- INSTANTIATE ENGINES ---
 risk_engine = RiskonODE(decay_rate=0.03, boost_factor=0.15)
 allocation_agent = AllocationAgent(risk_engine)
