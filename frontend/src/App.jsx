@@ -56,13 +56,22 @@ function App() {
     try {
       for (let c of MOCK_CASES) {
         // We send the mock case structure to the REAL brain
+        const payload = {
+          case_id: c.case_id,
+          company_name: c.companyName,
+          amount: c.amount,
+          initial_score: c.initial_score,
+          age_days: c.age_days,
+          history_logs: c.history
+        };
+
         const response = await fetch(API_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}` // AUTH HEADER ADDED
           },
-          body: JSON.stringify(c)
+          body: JSON.stringify(payload)
         });
 
         if (response.status === 401) {
