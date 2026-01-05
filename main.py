@@ -9,9 +9,11 @@ from modules.allocation_core.agent import AllocationAgent
 from modules.sentinel_guard.analyzer import Sentinel
 
 # Import Database Modules
-from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB
+from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB
 from sqlalchemy.orm import Session
-from fastapi import Depends
+from fastapi import Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
+from modules.security import verify_password, create_access_token, verify_token
 
 # Create the Database Tables (recoverai.db)
 Base.metadata.create_all(bind=engine)
@@ -35,6 +37,19 @@ allocation_agent = AllocationAgent(risk_engine)
 sentinel = Sentinel()
 
 # --- DATA MODELS ---
+# --- AUTH ENDPOINT ---
+@app.post("/token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
 class InteractionLog(BaseModel):
     date_offset: int  # e.g. 5 days ago
 
@@ -56,7 +71,7 @@ def health_check():
     return {"status": "active", "system": "RecoverAI Agentic Core"}
 
 @app.post("/api/v1/analyze")
-def analyze_case(case: CaseData, db: Session = Depends(get_db)):
+def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
     """
     Hyper-Intelligent Endpoint:
     1. Calculates Recovery Probability (ODE)
@@ -103,7 +118,7 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/v1/sentinel/audit")
-def audit_interaction(request: AuditRequest):
+def audit_interaction(request: AuditRequest, current_user: str = Depends(verify_token)):
     """
     Real-time Compliance Audit
     """

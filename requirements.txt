@@ -9,3 +9,8 @@ psycopg2-binary
 python-dotenv
 httpx
 google-cloud-aiplatform
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+stripe
+pandas

@@ -36,6 +36,12 @@ class InvoiceDB(Base):
     p_score = Column(Float, default=0.0)
     decision = Column(String, default="PENDING")
 
+class UserDB(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+
 # 3. HELPER TO GET DB SESSION
 def get_db():
     db = SessionLocal()

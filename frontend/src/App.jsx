@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CaseCard from './components/CaseCard';
+import Login from './Login';
 
 // MOCK DATA SIMULATING THE ERP
 const MOCK_CASES = [
@@ -32,6 +33,18 @@ const MOCK_CASES = [
 function App() {
   const [analyzedCases, setAnalyzedCases] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState(null);
+
+  // Check for existing session
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) setToken(savedToken);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+  };
 
   // LIVE API CALL (To Google Cloud Run)
   const runAnalysis = async () => {
@@ -44,9 +57,17 @@ function App() {
         // We send the mock case structure to the REAL brain
         const response = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` // AUTH HEADER ADDED
+          },
           body: JSON.stringify(c)
         });
+
+        if (response.status === 401) {
+          handleLogout();
+          throw new Error("Session Expired");
+        }
 
         if (!response.ok) throw new Error("API Connection Failed");
 
@@ -63,18 +84,35 @@ function App() {
       }
     } catch (err) {
       console.error("Cloud Connection Error:", err);
-      alert("Failed to connect to Cloud Backend. Is it running?");
+      if (err.message !== "Session Expired") {
+        alert("Failed to connect to Cloud Backend. Is it running?");
+      }
     }
 
     setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
     setLoading(false);
   };
 
+  if (!token) {
+    return <Login onLogin={(t) => {
+      localStorage.setItem('token', t);
+      setToken(t);
+    }} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">RecoverAI <span className="text-blue-600">SuRaksha Portal</span></h1>
-        <p className="text-gray-500">Agentic Debt Recovery System</p>
+      <header className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">RecoverAI <span className="text-blue-600">SuRaksha Portal</span></h1>
+          <p className="text-gray-500">Agentic Debt Recovery System</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="text-sm text-red-500 hover:text-red-700 border border-red-200 px-3 py-1 rounded"
+        >
+          Logout
+        </button>
       </header>
 
       <div className="mb-6">
