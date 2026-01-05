@@ -1,7 +1,9 @@
 
 # Use an official lightweight Python image.
 # https://hub.docker.com/_/python
-FROM python:3.10-slim
+# Use an official standard Python image (full version) to include all C-libs/tools
+# needed for Pandas, Scipy, and Google Cloud SDKs.
+FROM python:3.10
 
 # Allow statements and log messages to immediately appear in the Knative logs
 ENV PYTHONUNBUFFERED True
