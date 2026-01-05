@@ -2,10 +2,10 @@ const IS_DEVELOPMENT = import.meta.env.DEV;
 
 // 1. Define Base URL
 // - Development: Localhost (FastAPI defaults to 8000)
-// - Production: Cloud Run URL
+// - Production: Cloud Run URL (User Provided)
 const BASE_URL = IS_DEVELOPMENT
     ? "http://127.0.0.1:8000"
-    : "https://recoverai-backend-1038460339762.us-central1.run.app";
+    : "https://recoverai-backend-7k3o2t7hcq-uc.a.run.app";
 
 // 2. Export API Endpoints
 export const API = {
