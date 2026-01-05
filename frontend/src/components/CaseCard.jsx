@@ -1,7 +1,7 @@
 import React from 'react';
 
 // The "Smart Card" that displays the ODE Score and Suggested Action
-const CaseCard = ({ caseData }) => {
+const CaseCard = ({ caseData, onPay }) => {
     // Destructure data from the RISKON Engine
     const { companyName, amount, pScore, suggestedAction, riskLevel, violationTag } = caseData;
 
@@ -40,9 +40,17 @@ const CaseCard = ({ caseData }) => {
                     <span className="inline-block px-3 py-1 text-xs font-semibold tracking-wide text-indigo-800 bg-indigo-100 rounded-full mb-2">
                         Recommended Strategy
                     </span>
-                    <div className="font-bold text-indigo-600">
+                    <div className="font-bold text-indigo-600 mb-2">
                         {formatAction(suggestedAction)}
                     </div>
+
+                    {/* PAY NOW BUTTON (Stripe) */}
+                    <button
+                        onClick={() => onPay(caseData)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1 px-3 rounded shadow transition-colors"
+                    >
+                        Pay Now 💳
+                    </button>
                 </div>
             </div>
 

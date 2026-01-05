@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
 from modules.security import verify_password, create_access_token, verify_token
+from modules.security import verify_password, create_access_token, verify_token
 from modules.ingestion import process_csv_upload
+from modules.payments import create_payment_link
 
 # Create the Database Tables (recoverai.db)
 Base.metadata.create_all(bind=engine)
@@ -97,6 +99,14 @@ async def ingest_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     content = await file.read()
     results = process_csv_upload(content, db)
     return results
+
+class PaymentRequest(BaseModel):
+    case_id: str
+    amount: float
+
+@app.post("/api/v1/payment/create")
+def generate_payment_link(request: PaymentRequest, current_user: str = Depends(verify_token)):
+    return create_payment_link(request.case_id, request.amount)
 
 @app.post("/api/v1/analyze")
 def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):

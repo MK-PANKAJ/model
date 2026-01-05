@@ -125,6 +125,36 @@ function App() {
     }
   };
 
+  const handlePayment = async (caseData) => {
+    const PAYMENT_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/payment/create";
+
+    try {
+      const response = await fetch(PAYMENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          case_id: caseData.case_id,
+          amount: caseData.amount
+        })
+      });
+
+      if (!response.ok) throw new Error("Payment Link Creation Failed");
+
+      const data = await response.json();
+      if (data.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        alert("Error: " + JSON.stringify(data));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Payment Error: " + err.message);
+    }
+  };
+
   if (!token) {
     return <Login onLogin={(t) => {
       localStorage.setItem('token', t);
@@ -170,7 +200,7 @@ function App() {
         )}
 
         {analyzedCases.map((c) => (
-          <CaseCard key={c.case_id} caseData={c} />
+          <CaseCard key={c.case_id} caseData={c} onPay={handlePayment} />
         ))}
       </div>
     </div>
