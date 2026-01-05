@@ -11,9 +11,10 @@ from modules.sentinel_guard.analyzer import Sentinel
 # Import Database Modules
 from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB
 from sqlalchemy.orm import Session
-from fastapi import Depends, status
+from fastapi import Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
 from modules.security import verify_password, create_access_token, verify_token
+from modules.ingestion import process_csv_upload
 
 # Create the Database Tables (recoverai.db)
 Base.metadata.create_all(bind=engine)
@@ -87,6 +88,15 @@ class AuditRequest(BaseModel):
 @app.get("/")
 def health_check():
     return {"status": "active", "system": "RecoverAI Agentic Core"}
+
+@app.post("/api/v1/ingest")
+async def ingest_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    """
+    Upload FedEx CSV Export -> Cloud SQL
+    """
+    content = await file.read()
+    results = process_csv_upload(content, db)
+    return results
 
 @app.post("/api/v1/analyze")
 def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):

@@ -91,6 +91,38 @@ function App() {
 
     setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
     setLoading(false);
+    setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
+    setLoading(false);
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const UPLOAD_URL = "https://recoverai-backend-1038460339762.us-central1.run.app/api/v1/ingest";
+
+    try {
+      const response = await fetch(UPLOAD_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) throw new Error("Upload Failed");
+      const result = await response.json();
+      alert(`Ingestion Complete! Inserted: ${result.inserted}, Errors: ${result.errors.length}`);
+    } catch (err) {
+      console.error(err);
+      alert("Upload failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!token) {
@@ -115,7 +147,7 @@ function App() {
         </button>
       </header>
 
-      <div className="mb-6">
+      <div className="mb-6 flex gap-4">
         <button
           onClick={runAnalysis}
           disabled={loading}
@@ -123,6 +155,11 @@ function App() {
         >
           {loading ? "Processing ODE Models..." : "Run Daily Allocation Batch"}
         </button>
+
+        <label className="bg-emerald-600 text-white px-6 py-2 rounded-lg shadow hover:bg-emerald-700 transition cursor-pointer">
+          {loading ? "Uploading..." : "Upload FedEx CSV"}
+          <input type="file" onChange={handleFileUpload} accept=".csv" className="hidden" disabled={loading} />
+        </label>
       </div>
 
       <div className="grid gap-6">
