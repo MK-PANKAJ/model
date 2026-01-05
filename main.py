@@ -36,6 +36,24 @@ risk_engine = RiskonODE(decay_rate=0.03, boost_factor=0.15)
 allocation_agent = AllocationAgent(risk_engine)
 sentinel = Sentinel()
 
+# --- STARTUP: AUTO-CREATE ADMIN (MVP ONLY) ---
+from modules.security import get_password_hash
+@app.on_event("startup")
+def create_default_admin():
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.username == "admin").first()
+        if not user:
+            print("Creating default admin user...")
+            hashed_pw = get_password_hash("password123")
+            admin = UserDB(username="admin", hashed_password=hashed_pw)
+            db.add(admin)
+            db.commit()
+    except Exception as e:
+        print(f"Startup Admin Creation Failed: {e}")
+    finally:
+        db.close()
+
 # --- DATA MODELS ---
 # --- AUTH ENDPOINT ---
 @app.post("/token")
