@@ -2,7 +2,13 @@ import pytest
 from fastapi.testclient import TestClient
 from main import app
 
+from modules.security import verify_token
+
 client = TestClient(app)
+
+# --- AUTH BYPASS FOR TESTS ---
+# Override the dependency to always return a dummy user
+app.dependency_overrides[verify_token] = lambda: "test_user"
 
 def test_health_check():
     """Verify API is online"""
