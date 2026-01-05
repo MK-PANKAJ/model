@@ -4,3 +4,6 @@ numpy
 scipy
 vaderSentiment
 pydantic==2.6.0
+sqlalchemy
+psycopg2-binary
+python-dotenv
