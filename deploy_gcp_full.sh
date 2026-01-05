@@ -49,7 +49,8 @@ gcloud run deploy recoverai-backend \
     --region $REGION \
     --allow-unauthenticated \
     --add-cloudsql-instances $INSTANCE_CONNECTION_NAME \
-    --memory 1Gi \
+    --memory 2Gi \
+    --timeout 10m \
     --set-env-vars "DATABASE_URL=postgresql+psycopg2://$DB_USER:$DB_PASS@/$DB_NAME?host=/cloudsql/$INSTANCE_CONNECTION_NAME"
 
 echo ====================================================
