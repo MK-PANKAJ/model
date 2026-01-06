@@ -15,6 +15,17 @@ def process_csv_upload(file_contents: bytes, db: Session):
         # Standardize Columns (Lowercase, strip spaces)
         df.columns = [c.lower().strip() for c in df.columns]
         
+        # AUTO-CLEANUP: Remove all sample data when real data is uploaded
+        print("[*] Removing sample data...")
+        sample_debtors = db.query(DebtorDB).filter(DebtorDB.is_sample == 1).all()
+        for sample_debtor in sample_debtors:
+            # Delete all invoices for this sample debtor
+            db.query(InvoiceDB).filter(InvoiceDB.debtor_id == sample_debtor.id).delete()
+            # Delete the sample debtor
+            db.delete(sample_debtor)
+        db.commit()
+        print(f"[OK] Removed {len(sample_debtors)} sample debtors")
+        
         results = {"total": 0, "inserted": 0, "errors": []}
         results["total"] = len(df)
         
@@ -26,7 +37,7 @@ def process_csv_upload(file_contents: bytes, db: Session):
                 
                 debtor = db.query(DebtorDB).filter(DebtorDB.name == debtor_name).first()
                 if not debtor:
-                    debtor = DebtorDB(name=debtor_name, credit_score=credit_score)
+                    debtor = DebtorDB(name=debtor_name, credit_score=credit_score, is_sample=0)
                     db.add(debtor)
                     db.commit()
                     db.refresh(debtor)

@@ -25,6 +25,7 @@ class DebtorDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     credit_score = Column(Float)
+    is_sample = Column(Integer, default=0)  # 0=Real, 1=Sample (for auto-cleanup)
 
 class InvoiceDB(Base):
     __tablename__ = "invoices"
