@@ -4,7 +4,8 @@ import asyncio
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.twiml.voice_response import VoiceResponse
-from fastapi import FastAPI, HTTPException, Request, Form, Response
+from fastapi import FastAPI, HTTPException, Request, Form, Response, Depends, status, File, UploadFile
+from pydantic import BaseModel
 import os
 from datetime import datetime
 from typing import List, Optional
@@ -17,7 +18,7 @@ from modules.sentinel_guard.analyzer import Sentinel
 # Import Database Modules
 from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal, InteractionLogDB, StatusHistoryDB
 from sqlalchemy.orm import Session
-from fastapi import Depends, status, File, UploadFile
+# from fastapi import Depends, status, File, UploadFile  # Moved to line 7
 from fastapi.security import OAuth2PasswordRequestForm
 from modules.security import verify_password, create_access_token, verify_token, get_password_hash
 from modules.ingestion import process_csv_upload
