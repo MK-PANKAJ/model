@@ -4,9 +4,10 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+import os
 
-# SECRET CONFIG (Should be in env vars for production)
-SECRET_KEY = "super-secret-key-change-this-in-prod"
+# SECRET CONFIG (Must be set via environment variable in production)
+SECRET_KEY = os.getenv("SECRET_KEY", "INSECURE-dev-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
