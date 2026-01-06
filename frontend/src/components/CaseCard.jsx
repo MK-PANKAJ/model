@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
+import LogCallModal from './LogCallModal';
 
 // The "Smart Card" that displays the ODE Score and Suggested Action
-const CaseCard = ({ caseData, onPay }) => {
+const CaseCard = ({ caseData, onPay, onLogCall }) => {
+    const [showLogModal, setShowLogModal] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+
     // Destructure data from the RISKON Engine
-    const { companyName, amount, pScore, suggestedAction, riskLevel, violationTag } = caseData;
+    const { case_id, companyName, amount, pScore, suggestedAction, riskLevel, violationTag, history = [] } = caseData;
 
     // Dynamic Styling based on Recovery Probability (ODE Score)
     const getPriorityColor = (score) => {
@@ -17,6 +21,16 @@ const CaseCard = ({ caseData, onPay }) => {
         return action.replace("ALLOCATE_", "").replace("_", " ");
     };
 
+    const getRiskBadge = (risk) => {
+        const colors = {
+            'SAFE': 'bg-green-100 text-green-800',
+            'MODERATE': 'bg-yellow-100 text-yellow-800',
+            'CRITICAL': 'bg-red-100 text-red-800',
+            'UNKNOWN': 'bg-gray-100 text-gray-800'
+        };
+        return colors[risk] || colors['UNKNOWN'];
+    };
+
     return (
         <div className={`p-4 rounded shadow-sm bg-white mb-4 ${getPriorityColor(pScore)}`}>
             <div className="flex justify-between items-center">
@@ -25,6 +39,14 @@ const CaseCard = ({ caseData, onPay }) => {
                 <div className="w-1/3">
                     <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
                     <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>
+                    {history.length > 0 && (
+                        <button
+                            onClick={() => setShowHistory(!showHistory)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 mt-1"
+                        >
+                            {showHistory ? '▼' : '▶'} {history.length} interaction{history.length !== 1 ? 's' : ''}
+                        </button>
+                    )}
                 </div>
 
                 {/* CENTER: The Brain (RISKON Score) */}
@@ -44,15 +66,48 @@ const CaseCard = ({ caseData, onPay }) => {
                         {formatAction(suggestedAction)}
                     </div>
 
-                    {/* PAY NOW BUTTON (Stripe) */}
-                    <button
-                        onClick={() => onPay(caseData)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1 px-3 rounded shadow transition-colors"
-                    >
-                        Pay Now 💳
-                    </button>
+                    {/* ACTION BUTTONS */}
+                    <div className="flex gap-2 justify-end">
+                        <button
+                            onClick={() => setShowLogModal(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-1 px-3 rounded shadow transition-colors"
+                        >
+                            📞 Log Call
+                        </button>
+                        <button
+                            onClick={() => onPay(caseData)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1 px-3 rounded shadow transition-colors"
+                        >
+                            💳 Pay Now
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* INTERACTION HISTORY */}
+            {showHistory && history.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Recent Interactions</h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {history.slice(0, 5).map((log) => (
+                            <div key={log.id} className="bg-gray-50 p-2 rounded text-xs">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-gray-500">
+                                        {new Date(log.date).toLocaleDateString()} {new Date(log.date).toLocaleTimeString()}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${getRiskBadge(log.riskLevel)}`}>
+                                        {log.riskLevel}
+                                    </span>
+                                </div>
+                                <p className="text-gray-700">{log.text}</p>
+                                {log.sentimentScore !== undefined && (
+                                    <p className="text-gray-500 mt-1">Sentiment: {log.sentimentScore.toFixed(2)}</p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* FOOTER: The Eyes (Sentinel Status) */}
             <div className="mt-4 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
@@ -60,7 +115,7 @@ const CaseCard = ({ caseData, onPay }) => {
 
                 <div className="flex items-center">
                     <span className="font-semibold mr-2 text-gray-600">Sentinel Guard:</span>
-                    {riskLevel === "LOW" ? (
+                    {riskLevel === "LOW" || riskLevel === "SAFE" ? (
                         <span className="text-teal-600 flex items-center font-bold">
                             ✓ COMPLIANT
                         </span>
@@ -71,6 +126,19 @@ const CaseCard = ({ caseData, onPay }) => {
                     )}
                 </div>
             </div>
+
+            {/* LOG CALL MODAL */}
+            {showLogModal && (
+                <LogCallModal
+                    caseId={case_id}
+                    companyName={companyName}
+                    onClose={() => setShowLogModal(false)}
+                    onSuccess={() => {
+                        setShowLogModal(false);
+                        if (onLogCall) onLogCall();
+                    }}
+                />
+            )}
         </div>
     );
 };

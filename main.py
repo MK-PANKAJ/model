@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
 import os
+from datetime import datetime
+import json
 
 # Import our Logic Modules
 from modules.riskon_engine.model import RiskonODE
@@ -10,7 +12,7 @@ from modules.allocation_core.agent import AllocationAgent
 from modules.sentinel_guard.analyzer import Sentinel
 
 # Import Database Modules
-from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal
+from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal, InteractionLogDB
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
@@ -185,6 +187,61 @@ def audit_interaction(request: AuditRequest, current_user: str = Depends(verify_
     result = sentinel.scan_interaction(request.text)
     return result
 
+class InteractionRequest(BaseModel):
+    text: str
+
+@app.post("/api/v1/cases/{case_id}/log_interaction")
+def log_interaction(
+    case_id: str,
+    interaction: InteractionRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(verify_token)
+):
+    """
+    Log a debtor interaction and perform real-time Sentinel compliance check.
+    Returns compliance result immediately.
+    """
+    try:
+        # Extract numeric ID from case_id like "C-123"
+        invoice_id = int(case_id.replace("C-", ""))
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Case not found")
+        
+        # Run Sentinel compliance check on the interaction text
+        compliance_result = sentinel.scan_interaction(interaction.text)
+        
+        # Create interaction log
+        log_entry = InteractionLogDB(
+            invoice_id=invoice_id,
+            created_at=datetime.utcnow().isoformat(),
+            interaction_text=interaction.text,
+            risk_level=compliance_result.get("risk_level", "UNKNOWN"),
+            sentiment_score=compliance_result.get("sentiment_score", 0.0),
+            violation_flags=json.dumps(compliance_result.get("violation_flags", []))
+        )
+        db.add(log_entry)
+        
+        # If critical risk, update invoice risk_level
+        if compliance_result.get("risk_level") == "CRITICAL":
+            invoice.risk_level = "CRITICAL"
+        
+        db.commit()
+        db.refresh(log_entry)
+        
+        return {
+            "status": "success",
+            "log_id": log_entry.id,
+            "compliance": compliance_result,
+            "message": "Interaction logged successfully"
+        }
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case_id format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class ManualCaseRequest(BaseModel):
     company_name: str
     amount: float
@@ -237,13 +294,28 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
     invoices = db.query(InvoiceDB, DebtorDB).join(DebtorDB, InvoiceDB.debtor_id == DebtorDB.id).filter(InvoiceDB.status == "PENDING").all()
     
     for inv, debtor in invoices:
+        # Fetch interaction logs for this invoice
+        logs = db.query(InteractionLogDB).filter(
+            InteractionLogDB.invoice_id == inv.id
+        ).order_by(InteractionLogDB.created_at.desc()).all()
+        
         results.append({
             "case_id": f"C-{inv.id}", # Simple ID generation
             "companyName": debtor.name,
             "amount": inv.amount,
             "initial_score": debtor.credit_score,
             "age_days": inv.age_days,
-            "history": [], # Placeholder until InteractionLog table is linked
+            "history": [
+                {
+                    "id": log.id,
+                    "date": log.created_at,
+                    "text": log.interaction_text,
+                    "riskLevel": log.risk_level,
+                    "sentimentScore": log.sentiment_score,
+                    "violationFlags": json.loads(log.violation_flags) if log.violation_flags else []
+                }
+                for log in logs
+            ],
             "pScore": inv.p_score,
             "suggestedAction": inv.decision,
             "status": inv.status,

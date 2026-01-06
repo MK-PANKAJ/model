@@ -41,6 +41,16 @@ class InvoiceDB(Base):
     # Payment Status
     status = Column(String, default="PENDING")  # PENDING | PAID
 
+class InteractionLogDB(Base):
+    __tablename__ = "interaction_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    created_at = Column(String)  # ISO timestamp
+    interaction_text = Column(String)  # What the agent said/wrote
+    risk_level = Column(String, default="UNKNOWN")  # Sentinel result
+    sentiment_score = Column(Float, default=0.0)
+    violation_flags = Column(String, default="[]")  # JSON as string for SQLite compatibility
+
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
