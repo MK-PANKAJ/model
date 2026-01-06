@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import LogCallModal from './LogCallModal';
+import StatusBadge from './StatusBadge';
+import UpdateStatusModal from './UpdateStatusModal';
 
 // The "Smart Card" that displays the ODE Score and Suggested Action
 const CaseCard = ({ caseData, onPay, onLogCall }) => {
     const [showLogModal, setShowLogModal] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [showStatusModal, setShowStatusModal] = useState(false);
 
     // Destructure data from the RISKON Engine
-    const { case_id, companyName, amount, pScore, suggestedAction, riskLevel, violationTag, history = [] } = caseData;
+    const { case_id, companyName, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
 
     // Dynamic Styling based on Recovery Probability (ODE Score)
     const getPriorityColor = (score) => {
@@ -37,16 +40,29 @@ const CaseCard = ({ caseData, onPay, onLogCall }) => {
 
                 {/* LEFT: Case Info */}
                 <div className="w-1/3">
-                    <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
+                        <StatusBadge status={status} />
+                    </div>
                     <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>
-                    {history.length > 0 && (
-                        <button
-                            onClick={() => setShowHistory(!showHistory)}
-                            className="text-xs text-indigo-600 hover:text-indigo-800 mt-1"
-                        >
-                            {showHistory ? '▼' : '▶'} {history.length} interaction{history.length !== 1 ? 's' : ''}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                        {history.length > 0 && (
+                            <button
+                                onClick={() => setShowHistory(!showHistory)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800"
+                            >
+                                {showHistory ? '▼' : '▶'} {history.length} interaction{history.length !== 1 ? 's' : ''}
+                            </button>
+                        )}
+                        {status !== 'CLOSED' && (
+                            <button
+                                onClick={() => setShowStatusModal(true)}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                                📝 Update Status
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* CENTER: The Brain (RISKON Score) */}
@@ -136,6 +152,20 @@ const CaseCard = ({ caseData, onPay, onLogCall }) => {
                     onSuccess={() => {
                         setShowLogModal(false);
                         if (onLogCall) onLogCall();
+                    }}
+                />
+            )}
+
+            {/* UPDATE STATUS MODAL */}
+            {showStatusModal && (
+                <UpdateStatusModal
+                    caseId={case_id}
+                    currentStatus={status}
+                    companyName={companyName}
+                    onClose={() => setShowStatusModal(false)}
+                    onSuccess={() => {
+                        setShowStatusModal(false);
+                        if (onLogCall) onLogCall(); // Refresh cases
                     }}
                 />
             )}

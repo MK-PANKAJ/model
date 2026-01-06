@@ -39,7 +39,10 @@ class InvoiceDB(Base):
     # Sentinel Compliance
     risk_level = Column(String, default="UNKNOWN")
     # Payment Status
-    status = Column(String, default="PENDING")  # PENDING | PAID
+    status = Column(String, default="PENDING")  # PENDING | IN_PROGRESS | UNDER_REVIEW | RESOLVED | CLOSED | ESCALATED
+    resolved_at = Column(String, nullable=True)  # ISO timestamp when resolved
+    closed_at = Column(String, nullable=True)  # ISO timestamp when closed
+    closed_reason = Column(String, nullable=True)  # Reason for closing
 
 class InteractionLogDB(Base):
     __tablename__ = "interaction_logs"
@@ -50,6 +53,17 @@ class InteractionLogDB(Base):
     risk_level = Column(String, default="UNKNOWN")  # Sentinel result
     sentiment_score = Column(Float, default=0.0)
     violation_flags = Column(String, default="[]")  # JSON as string for SQLite compatibility
+
+class StatusHistoryDB(Base):
+    __tablename__ = "status_history"
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    old_status = Column(String)
+    new_status = Column(String)
+    changed_by = Column(String)  # username or "SYSTEM"
+    changed_at = Column(String)  # ISO timestamp
+    reason = Column(String, nullable=True)  # Optional reason for change
+    auto_updated = Column(Integer, default=0)  # 0=Manual, 1=Automatic
 
 class UserDB(Base):
     __tablename__ = "users"

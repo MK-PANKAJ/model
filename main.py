@@ -12,7 +12,7 @@ from modules.allocation_core.agent import AllocationAgent
 from modules.sentinel_guard.analyzer import Sentinel
 
 # Import Database Modules
-from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal, InteractionLogDB
+from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal, InteractionLogDB, StatusHistoryDB
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
@@ -223,9 +223,42 @@ def log_interaction(
         )
         db.add(log_entry)
         
-        # If critical risk, update invoice risk_level
+        # Auto-update status to IN_PROGRESS on first interaction (if PENDING)
+        if invoice.status == "PENDING":
+            old_status = invoice.status
+            invoice.status = "IN_PROGRESS"
+            timestamp = datetime.utcnow().isoformat()
+            
+            status_history = StatusHistoryDB(
+                invoice_id=invoice_id,
+                old_status=old_status,
+                new_status="IN_PROGRESS",
+                changed_by=current_user,
+                changed_at=timestamp,
+                reason="First interaction logged",
+                auto_updated=1
+            )
+            db.add(status_history)
+        
+        # If critical risk, update invoice risk_level and escalate
         if compliance_result.get("risk_level") == "CRITICAL":
             invoice.risk_level = "CRITICAL"
+            # Auto-escalate if in progress
+            if invoice.status == "IN_PROGRESS":
+                old_status = invoice.status
+                invoice.status = "ESCALATED"
+                timestamp = datetime.utcnow().isoformat()
+                
+                escalate_history = StatusHistoryDB(
+                    invoice_id=invoice_id,
+                    old_status=old_status,
+                    new_status="ESCALATED",
+                    changed_by="SYSTEM",
+                    changed_at=timestamp,
+                    reason="Critical compliance violation detected",
+                    auto_updated=1
+                )
+                db.add(escalate_history)
         
         db.commit()
         db.refresh(log_entry)
@@ -240,6 +273,94 @@ def log_interaction(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid case_id format")
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class StatusUpdateRequest(BaseModel):
+    new_status: str  # PENDING, IN_PROGRESS, UNDER_REVIEW, RESOLVED, CLOSED, ESCALATED
+    reason: Optional[str] = None
+
+@app.patch("/api/v1/cases/{case_id}/status")
+def update_case_status(
+    case_id: str,
+    update: StatusUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(verify_token)
+):
+    """
+    Update case status manually with validation and history tracking.
+    """
+    # Valid status transitions
+    VALID_TRANSITIONS = {
+        "PENDING": ["IN_PROGRESS", "CLOSED"],
+        "IN_PROGRESS": ["UNDER_REVIEW", "RESOLVED", "CLOSED", "ESCALATED"],
+        "UNDER_REVIEW": ["IN_PROGRESS", "RESOLVED", "ESCALATED"],
+        "RESOLVED": ["CLOSED"],
+        "ESCALATED": ["UNDER_REVIEW", "CLOSED"],
+        "CLOSED": []  # Final state
+    }
+    
+    try:
+        # Extract numeric ID from case_id like "C-123"
+        invoice_id = int(case_id.replace("C-", ""))
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Case not found")
+        
+        old_status = invoice.status
+        new_status = update.new_status.upper()
+        
+        # Validate transition
+        if old_status not in VALID_TRANSITIONS:
+            raise HTTPException(status_code=400, detail=f"Invalid current status: {old_status}")
+        
+        if new_status not in VALID_TRANSITIONS[old_status]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid transition: {old_status} → {new_status}"
+            )
+        
+        # Update invoice status
+        invoice.status = new_status
+        
+        # Set timestamps based on new status
+        timestamp = datetime.utcnow().isoformat()
+        if new_status == "RESOLVED" and not invoice.resolved_at:
+            invoice.resolved_at = timestamp
+        elif new_status == "CLOSED":
+            if not invoice.closed_at:
+                invoice.closed_at = timestamp
+            if update.reason:
+                invoice.closed_reason = update.reason
+        
+        # Create status history entry
+        history = StatusHistoryDB(
+            invoice_id=invoice_id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by=current_user,
+            changed_at=timestamp,
+            reason=update.reason,
+            auto_updated=0  # Manual update
+        )
+        db.add(history)
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Status updated from {old_status} to {new_status}",
+            "case_id": case_id,
+            "new_status": new_status,
+            "resolved_at": invoice.resolved_at,
+            "closed_at": invoice.closed_at
+        }
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case_id format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 class ManualCaseRequest(BaseModel):
@@ -327,7 +448,7 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
 def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
     """
     Stripe redirects here after successful payment.
-    Updates invoice status to PAID.
+    Updates invoice status to RESOLVED.
     """
     try:
         # Extract numeric ID from case_id like "C-123"
@@ -335,8 +456,24 @@ def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
         invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
         
         if invoice:
-            invoice.status = "PAID"
+            old_status = invoice.status
+            invoice.status = "RESOLVED"
+            timestamp = datetime.utcnow().isoformat()
+            invoice.resolved_at = timestamp
+            
+            # Create status history
+            history = StatusHistoryDB(
+                invoice_id=invoice_id,
+                old_status=old_status,
+                new_status="RESOLVED",
+                changed_by="SYSTEM",
+                changed_at=timestamp,
+       reason="Payment received via Stripe",
+                auto_updated=1
+            )
+            db.add(history)
             db.commit()
+            
             # Redirect to frontend with success banner
             domain = os.getenv("DOMAIN_URL", "https://MK-PANKAJ.github.io/model")
             return {"status": "success", "redirect": f"{domain}?payment=success&case_id={case_id}"}
