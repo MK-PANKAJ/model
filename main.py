@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional
-import uvicorn
-import os
-from datetime import datetime
 import json
+import requests
+import asyncio
+from twilio.jwt.access_token import AccessToken
+from twilio.jwt.access_token.grants import VoiceGrant
+from twilio.twiml.voice_response import VoiceResponse
+from fastapi import Request, Form, Response
 
 # Import our Logic Modules
 from modules.riskon_engine.model import RiskonODE
@@ -21,7 +21,7 @@ from modules.ingestion import process_csv_upload
 from modules.payments import create_payment_link
 
 # Create the Database Tables (recoverai.db)
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine) # Moved to startup event for Cloud Build stability
 
 app = FastAPI(title="RecoverAI Core API", version="1.0.0")
 
@@ -43,7 +43,9 @@ sentinel = Sentinel()
 
 # --- STARTUP: AUTO-CREATE ADMIN (MVP ONLY) ---
 @app.on_event("startup")
-def create_default_admin():
+def startup_event():
+    print("--- STARTUP: Ensuring Database Tables ---")
+    Base.metadata.create_all(bind=engine)
     print("--- STARTUP: Initializing Admin User ---")
     try:
         db = SessionLocal()
@@ -534,6 +536,159 @@ def update_contact(case_id: str, request: ContactUpdateRequest, db: Session = De
 class BridgeRequest(BaseModel):
     agent_phone: str
     debtor_phone: str
+
+# --- TELEPHONY & ANALYSIS SYSTEM ---
+
+@app.get("/api/v1/telephony/token")
+def get_voice_token(current_user: str = Depends(verify_token)):
+    """
+    Generates a Twilio Access Token for the frontend VOIP client.
+    """
+    try:
+        # Check if credentials are present
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        api_key = os.getenv("TWILIO_API_KEY")
+        api_secret = os.getenv("TWILIO_API_SECRET")
+        app_sid = os.getenv("TWILIO_APP_SID")
+        
+        if not all([account_sid, api_key, api_secret, app_sid]):
+            raise HTTPException(status_code=500, detail="Twilio credentials missing in .env")
+
+        token = AccessToken(
+            account_sid,
+            api_key,
+            api_secret,
+            identity=current_user
+        )
+        voice_grant = VoiceGrant(
+            outgoing_application_sid=app_sid,
+            incoming_allow=True
+        )
+        token.add_grant(voice_grant)
+        return {"token": token.to_jwt()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Token Error: {str(e)}")
+
+@app.post("/api/v1/telephony/voice")
+async def handle_voice_webhook(request: Request):
+    """
+    Twilio Voice Webhook: Orchestrates the call and enables recording.
+    """
+    form_data = await request.form()
+    number_to_dial = form_data.get("To")
+    # case_id can be passed as a custom parameter in the dial connection
+    case_id = form_data.get("case_id", "UNKNOWN")
+
+    response = VoiceResponse()
+    
+    if not number_to_dial:
+        response.say("System Error. No number provided.")
+        return Response(content=str(response), media_type="application/xml")
+
+    print(f"[VOICE] Initiating Bridge to {number_to_dial} for Case {case_id}")
+
+    # Connect to Debtor + Enable Recording
+    # recording_status_callback will trigger our analysis loop
+    dial = response.dial(
+        caller_id=os.getenv("TWILIO_CALLER_ID", "+1234567890"),
+        record="record-from-ringing-dual",
+        recording_status_callback=f"{os.getenv('DOMAIN_URL')}/api/v1/telephony/recording_complete?case_id={case_id}",
+        recording_status_callback_event="completed"
+    )
+    dial.number(number_to_dial)
+    
+    return Response(content=str(response), media_type="application/xml")
+
+@app.post("/api/v1/telephony/recording_complete")
+async def handle_recording_complete(
+    case_id: str, 
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Post-Call AI Analysis Loop:
+    1. Detects finished recording
+    2. Downloads audio
+    3. Analyzes with Sentinel (Gemini)
+    4. Updates Riskon Score and Status
+    """
+    form_data = await request.form()
+    recording_url = form_data.get("RecordingUrl")
+    
+    if not recording_url:
+        return {"status": "ignored", "reason": "No recording URL"}
+
+    print(f"[ANALYSIS] Triggered for Case {case_id}. Audio: {recording_url}")
+    
+    try:
+        # A. Download Audio (Twilio recordings are public by default unless configured otherwise)
+        audio_resp = requests.get(recording_url)
+        audio_content = audio_resp.content
+        
+        # B. Analyze with Sentinel (Gemini Multimodal)
+        # Assuming audio/wav as Twilio default
+        analysis = await sentinel.analyze_audio(audio_content, "audio/wav")
+        
+        # C. Update Database
+        # Extract invoice ID (C-XX format)
+        try:
+            invoice_id = int(case_id.replace("C-", ""))
+        except:
+            print(f"[ERROR] Invalid Case ID format: {case_id}")
+            return {"status": "error", "message": "Invalid Case ID"}
+
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        
+        if invoice:
+            # 1. Save Transcription/Analysis to logs
+            log = InteractionLogDB(
+                invoice_id=invoice_id,
+                created_at=datetime.utcnow().isoformat(),
+                interaction_text=f"[AUTO-ANALYSIS] {analysis.get('transcript', 'Call Recorded')}",
+                risk_level=analysis.get('risk_level', 'UNKNOWN'),
+                intent=analysis.get('intent', 'GENERAL'),
+                sentiment_score=0.0,
+                violation_flags=json.dumps(analysis.get('violation_flags', []))
+            )
+            db.add(log)
+            
+            # 2. Recalculate Score
+            # Define weights based on AI findings
+            weight = 1.0
+            if analysis.get("intent") == "PTP": weight = 2.0  # Big boost for promise to pay
+            if analysis.get("risk_level") == "CRITICAL": weight = 0.0 # Compliance violation resets probability
+            
+            new_score = risk_engine.predict_probability(
+                invoice.p_score,
+                invoice.age_days,
+                [{"day": invoice.age_days, "weight": weight}]
+            )
+            invoice.p_score = new_score
+            
+            # 3. Status Transitions
+            if analysis.get("intent") == "PTP":
+                invoice.status = "UNDER_REVIEW"
+                # Add status history entry
+                history = StatusHistoryDB(
+                    invoice_id=invoice_id,
+                    old_status="IN_PROGRESS", # Assume current
+                    new_status="UNDER_REVIEW",
+                    changed_by="SENTINEL_AI",
+                    changed_at=datetime.utcnow().isoformat(),
+                    reason="Automated intent detection: Promise to Pay",
+                    auto_updated=1
+                )
+                db.add(history)
+                
+            db.commit()
+            print(f"[SUCCESS] AI Loop Complete. Case {case_id} p_score -> {new_score}")
+        else:
+            print(f"[WARNING] Case ID {case_id} not found in DB")
+
+    except Exception as e:
+        print(f"[ERROR] Telephony Analysis Loop Failed: {e}")
+        
+    return {"status": "processed"}
 
 @app.post("/api/v1/telephony/initiate_bridge")
 def initiate_telephony_bridge(request: BridgeRequest, current_user: str = Depends(verify_token)):

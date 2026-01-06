@@ -4,6 +4,7 @@ import Login from './Login';
 import API from './config';
 import PaymentStatus from './components/PaymentStatus';
 import AddCaseModal from './components/AddCaseModal';
+import { Device } from '@twilio/voice-sdk';
 
 const VirtualDialer = ({ phoneNumber, micState, onEnd }) => {
   const [connectStatus, setConnectStatus] = useState('Initiating VOIP...');
@@ -263,36 +264,66 @@ function App() {
   };
 
   const handleDirectCall = async (debtorPhone) => {
+    // Find the case ID for this phone number to track it
+    const relatedCase = analyzedCases.find(c => c.phone === debtorPhone);
+    const caseId = relatedCase ? relatedCase.case_id : "UNKNOWN";
+
     setActiveCall(debtorPhone);
 
-    // Request Microphone Permission
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicPermission('granted');
-      // In a real app, you'd keep the stream or pass it to a WebRTC peer connection
-      // stream.getTracks().forEach(track => track.stop()); // Stopping for now just to show permission worked
-    } catch (err) {
-      setMicPermission('denied');
-      alert("Microphone access is required for Browser Dialing.");
-      setActiveCall(null);
-      return;
-    }
-
-    // Log the Direct Dial event to the backend
-    try {
-      await fetch(API.INITIATE_BRIDGE, {
-        method: 'POST',
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          agent_phone: "BROWSER_AGENT", // Signifies direct browser dial
-          debtor_phone: debtorPhone
-        })
+      // 1. Get Token from Backend
+      const tokenResp = await fetch(`${API.BASE_URL}/api/v1/telephony/token`, {
+        headers: { "Authorization": `Bearer ${token}` }
       });
+      if (!tokenResp.ok) throw new Error("Could not fetch VOIP token");
+      const { token: voiceToken } = await tokenResp.json();
+
+      // 2. Setup Twilio Device
+      const device = new Device(voiceToken, {
+        codecPreferences: ['opus', 'pcmu'],
+        logLevel: 0
+      });
+
+      // Request Microphone Permission explicitly
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        setMicPermission('granted');
+      } catch (err) {
+        setMicPermission('denied');
+        alert("Microphone access is required for Browser Dialing.");
+        setActiveCall(null);
+        return;
+      }
+
+      await device.register();
+
+      // 3. Connect Call with metadata
+      const call = await device.connect({
+        params: {
+          To: debtorPhone,
+          case_id: caseId // Send Case ID to Backend for Analysis linking
+        }
+      });
+
+      // 4. Handle Disconnect
+      call.on('disconnect', () => {
+        console.log("Call disconnected");
+        setActiveCall(null);
+        // Wait 5s for backend AI analysis loop to complete, then refresh UI
+        setTimeout(() => fetchCases(token), 5000);
+        alert("Call Ended. AI Analysis in progress...");
+      });
+
+      call.on('error', (error) => {
+        console.error("Twilio Call Error:", error);
+        setActiveCall(null);
+        alert("Call failed: " + error.message);
+      });
+
     } catch (err) {
-      console.error("Direct Dial Tracking Failed:", err);
+      console.error("Twilio Device/Call Error:", err);
+      alert("Failed to connect call. Ensure backend is running and Twilio credentials are valid.");
+      setActiveCall(null);
     }
   };
 

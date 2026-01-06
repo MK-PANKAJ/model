@@ -14,3 +14,5 @@ python-jose[cryptography]
 python-multipart
 stripe
 pandas
+twilio
+requests
