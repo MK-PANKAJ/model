@@ -5,52 +5,60 @@ import API from './config';
 import PaymentStatus from './components/PaymentStatus';
 import AddCaseModal from './components/AddCaseModal';
 
-const VirtualDialer = ({ phoneNumber, callerId, onEnd }) => {
-  const [connectStatus, setConnectStatus] = useState('Requesting Bridge...');
+const VirtualDialer = ({ phoneNumber, micState, onEnd }) => {
+  const [connectStatus, setConnectStatus] = useState('Initiating VOIP...');
 
   useEffect(() => {
     if (phoneNumber) {
-      setConnectStatus('Requesting Bridge...');
-      setTimeout(() => setConnectStatus('Ringing Agent...'), 1500);
-      setTimeout(() => setConnectStatus('Connecting Debtor...'), 3500);
-      setTimeout(() => setConnectStatus('LIVE: Secure Recording On'), 6000);
+      setConnectStatus(micState === 'granted' ? 'Initiating VOIP...' : 'Awaiting Mic Access...');
+      if (micState === 'granted') {
+        setTimeout(() => setConnectStatus('Connecting Direct...'), 1000);
+        setTimeout(() => setConnectStatus('LIVE: Secure AI Recording On'), 3000);
+      }
     }
-  }, [phoneNumber]);
+  }, [phoneNumber, micState]);
 
   if (!phoneNumber) return null;
   return (
-    <div className="fixed bottom-6 right-6 w-80 bg-gray-900 text-white rounded-2xl shadow-2xl p-5 border border-gray-700 animate-slide-up z-50">
-      <div className="flex justify-between items-center mb-4">
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${connectStatus.includes('LIVE') ? 'bg-red-600 animate-pulse' : 'bg-indigo-600'}`}>
-          {connectStatus}
-        </span>
-        <button onClick={onEnd} className="text-gray-400 hover:text-white">✕</button>
+    <div className="fixed bottom-6 right-6 w-80 bg-slate-900 text-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-6 border border-white/10 animate-slide-up z-50 backdrop-blur-md">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${connectStatus.includes('LIVE') ? 'bg-red-500 animate-pulse' : 'bg-blue-400 animate-pulse'}`}></span>
+          <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">{connectStatus}</span>
+        </div>
+        <button onClick={onEnd} className="text-slate-500 hover:text-white transition-colors">✕</button>
       </div>
+
       <div className="text-center py-4">
-        <div className="w-16 h-16 bg-indigo-500 rounded-full mx-auto flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/20">
-          <span className="text-2xl">⚡</span>
-        </div>
-        <h4 className="font-bold text-lg">{phoneNumber}</h4>
-        <div className="mt-3 space-y-1">
-          <p className="text-[10px] text-gray-500">VOIP PATH: CLOUD BRIDGE</p>
-          <p className="text-[10px] text-gray-400 font-mono">ID: {callerId || 'DUMMY-AGENT'}</p>
-        </div>
-      </div>
-      <div className="bg-black/30 rounded-lg p-3 mt-4 border border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="text-xl">📞</div>
-          <div className="flex-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest">Bridging To</p>
-            <p className="text-xs font-semibold text-indigo-300">Your Real Settings Number</p>
+        <div className="relative inline-block mb-4">
+          <div className="absolute inset-0 bg-blue-500/20 rounded-full blur-xl animate-pulse"></div>
+          <div className="relative w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+            <span className="text-3xl">🎙️</span>
           </div>
         </div>
+        <h4 className="text-xl font-bold text-white mb-1">+{phoneNumber}</h4>
+        <p className="text-xs text-blue-400 font-semibold mb-6">Direct Browser Call (No SIM Required)</p>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="bg-white/5 rounded-xl p-3 border border-white/5 text-center">
+          <span className="block text-xl mb-1">{micState === 'granted' ? '✅' : '🚫'}</span>
+          <span className="text-[10px] text-slate-500 uppercase">Microphone</span>
+        </div>
+        <div className="bg-white/5 rounded-xl p-3 border border-white/5 text-center">
+          <span className="block text-xl mb-1">🎧</span>
+          <span className="text-[10px] text-slate-500 uppercase">Headset</span>
+        </div>
+      </div>
+
       <button
         onClick={onEnd}
-        className="w-full bg-red-600/20 text-red-500 border border-red-600/50 hover:bg-red-600 hover:text-white py-2 rounded-lg text-sm font-bold mt-4 transition-all"
+        className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-2xl font-bold shadow-lg shadow-red-500/20 transition-all transform active:scale-95"
       >
-        Discard Call
+        End Direct Call
       </button>
+
+      <p className="text-[9px] text-slate-500 text-center mt-4">Powered by RecoverAI WebRTC Gateway</p>
     </div>
   );
 };
@@ -86,6 +94,7 @@ const MOCK_CASES = [
 function App() {
   const [analyzedCases, setAnalyzedCases] = useState([]);
   const [activeCall, setActiveCall] = useState(null);
+  const [micPermission, setMicPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -255,6 +264,20 @@ function App() {
 
   const handleDirectCall = async (debtorPhone) => {
     setActiveCall(debtorPhone);
+
+    // Request Microphone Permission
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicPermission('granted');
+      // In a real app, you'd keep the stream or pass it to a WebRTC peer connection
+      // stream.getTracks().forEach(track => track.stop()); // Stopping for now just to show permission worked
+    } catch (err) {
+      setMicPermission('denied');
+      alert("Microphone access is required for Browser Dialing.");
+      setActiveCall(null);
+      return;
+    }
+
     // Log the Direct Dial event to the backend
     try {
       await fetch(API.INITIATE_BRIDGE, {
@@ -430,6 +453,7 @@ function App() {
       {/* GLOBAL VIRTUAL DIALER */}
       <VirtualDialer
         phoneNumber={activeCall}
+        micState={micPermission}
         onEnd={() => setActiveCall(null)}
       />
     </div>
