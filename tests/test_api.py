@@ -1,6 +1,11 @@
+```python
 import pytest
 from fastapi.testclient import TestClient
 from main import app
+from modules.database import Base, engine
+
+# Create all tables with updated schema before running tests
+Base.metadata.create_all(bind=engine)
 
 from modules.security import verify_token
 
