@@ -177,5 +177,28 @@ def audit_interaction(request: AuditRequest, current_user: str = Depends(verify_
     result = sentinel.scan_interaction(request.text)
     return result
 
+@app.get("/api/v1/cases")
+def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    """
+    Fetch all pending invoices from the database.
+    """
+    results = []
+    # Join Invoice with Debtor to get company name
+    invoices = db.query(InvoiceDB, DebtorDB).join(DebtorDB, InvoiceDB.debtor_id == DebtorDB.id).filter(InvoiceDB.status == "PENDING").all()
+    
+    for inv, debtor in invoices:
+        results.append({
+            "case_id": f"C-{inv.id}", # Simple ID generation
+            "companyName": debtor.name,
+            "amount": inv.amount,
+            "initial_score": debtor.credit_score,
+            "age_days": inv.age_days,
+            "history": [], # Placeholder until InteractionLog table is linked
+            "pScore": inv.p_score,
+            "suggestedAction": inv.decision,
+            "status": inv.status
+        })
+    return results
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

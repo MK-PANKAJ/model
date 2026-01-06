@@ -40,8 +40,30 @@ function App() {
   // Check for existing session
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
-    if (savedToken) setToken(savedToken);
+    if (savedToken) {
+      setToken(savedToken);
+      fetchCases(savedToken); // Load data immediately
+    }
   }, []);
+
+  const fetchCases = async (authToken) => {
+    try {
+      setLoading(true);
+      const response = await fetch(API.CASES, {
+        headers: { "Authorization": `Bearer ${authToken}` }
+      });
+      if (response.status === 401) {
+        handleLogout();
+        return;
+      }
+      const data = await response.json();
+      setAnalyzedCases(data);
+    } catch (err) {
+      console.error("Failed to load cases:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -49,16 +71,21 @@ function App() {
   };
 
   // LIVE API CALL (To Google Cloud Run)
+  // LIVE API CALL (To Google Cloud Run)
   const runAnalysis = async () => {
     setLoading(true);
-    const results = [];
     const API_URL = API.ANALYZE;
 
     try {
-      for (let c of MOCK_CASES) {
-        // We send the mock case structure to the REAL brain
+      // Fetch fresh list from DB first (Self-Healing)
+      await fetchCases(token);
+
+      // We iterate over the REAL cases now
+      for (let c of analyzedCases) {
+        if (c.pScore) continue; // Skip already analyzed
+
         const payload = {
-          case_id: c.case_id,
+          case_id: c.case_id.replace("C-", ""), // Send ID only
           company_name: c.companyName,
           amount: c.amount,
           initial_score: c.initial_score,
@@ -70,40 +97,19 @@ function App() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}` // AUTH HEADER ADDED
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify(payload)
         });
-
-        if (response.status === 401) {
-          handleLogout();
-          throw new Error("Session Expired");
-        }
-
-        if (!response.ok) throw new Error("API Connection Failed");
-
-        const data = await response.json();
-
-        // Merge the AI Brain result with our Case Data
-        results.push({
-          ...c,
-          pScore: data.riskon_score,
-          suggestedAction: data.allocation_decision.action,
-          riskLevel: "LOW", // Sentinel default
-          violationTag: ""
-        });
       }
+      // Reload to see results
+      await fetchCases(token);
+
     } catch (err) {
-      console.error("Cloud Connection Error:", err);
-      if (err.message !== "Session Expired") {
-        alert("Failed to connect to Cloud Backend. Is it running?");
-      }
+      console.error("Batch Analysis Error:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
-    setLoading(false);
-    setAnalyzedCases(results.sort((a, b) => b.pScore - a.pScore));
-    setLoading(false);
   };
 
   const handleFileUpload = async (event) => {
@@ -170,6 +176,7 @@ function App() {
     return <Login onLogin={(t) => {
       localStorage.setItem('token', t);
       setToken(t);
+      fetchCases(t);
     }} />;
   }
 
