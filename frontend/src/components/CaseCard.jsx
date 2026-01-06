@@ -24,7 +24,7 @@ const CaseCard = ({ caseData, onPay }) => {
                 {/* LEFT: Case Info */}
                 <div className="w-1/3">
                     <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
-                    <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">${amount.toLocaleString()}</span></p>
+                    <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>
                 </div>
 
                 {/* CENTER: The Brain (RISKON Score) */}

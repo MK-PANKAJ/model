@@ -5,7 +5,7 @@ import os
 # Defaulting to a dummy placeholder to prevent crash on startup if missing
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_key_must_be_set_in_env_vars")
 
-def create_payment_link(case_id: str, amount: float, currency: str = "usd"):
+def create_payment_link(case_id: str, amount: float, currency: str = "inr"):
     """
     Generates a Stripe Checkout Session URL for a specific debt case.
     """
