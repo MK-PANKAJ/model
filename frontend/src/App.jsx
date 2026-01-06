@@ -3,6 +3,7 @@ import CaseCard from './components/CaseCard';
 import Login from './Login';
 import API from './config';
 import PaymentStatus from './components/PaymentStatus';
+import AddCaseModal from './components/AddCaseModal';
 
 // MOCK DATA SIMULATING THE ERP
 const MOCK_CASES = [
@@ -36,6 +37,7 @@ function App() {
   const [analyzedCases, setAnalyzedCases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Check for existing session
   useEffect(() => {
@@ -209,7 +211,24 @@ function App() {
           {loading ? "Uploading..." : "Upload FedEx CSV"}
           <input type="file" onChange={handleFileUpload} accept=".csv" className="hidden" disabled={loading} />
         </label>
+
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="bg-purple-600 text-white px-6 py-2 rounded-lg shadow hover:bg-purple-700 transition"
+        >
+          + Add Case Manually
+        </button>
       </div>
+
+      {showAddModal && (
+        <AddCaseModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => {
+            fetchCases(token);
+            alert('Case added successfully!');
+          }}
+        />
+      )}
 
       <div className="grid gap-6">
         {analyzedCases.length === 0 && !loading && (

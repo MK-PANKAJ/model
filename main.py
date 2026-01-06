@@ -186,6 +186,48 @@ def audit_interaction(request: AuditRequest, current_user: str = Depends(verify_
     result = sentinel.scan_interaction(request.text)
     return result
 
+class ManualCaseRequest(BaseModel):
+    company_name: str
+    amount: float
+    age_days: int
+    credit_score: float
+
+@app.post("/api/v1/cases/create")
+def create_manual_case(case: ManualCaseRequest, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    """
+    Manually add a single debt case via UI.
+    """
+    try:
+        # Create or get debtor
+        debtor = db.query(DebtorDB).filter(DebtorDB.name == case.company_name).first()
+        if not debtor:
+            debtor = DebtorDB(name=case.company_name, credit_score=case.credit_score, is_sample=0)
+            db.add(debtor)
+            db.commit()
+            db.refresh(debtor)
+        
+        # Create invoice
+        invoice = InvoiceDB(
+            debtor_id=debtor.id,
+            amount=case.amount,
+            age_days=case.age_days,
+            p_score=0.0,
+            decision="PENDING",
+            risk_level="UNKNOWN",
+            status="PENDING"
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        return {
+            "status": "success",
+            "case_id": f"C-{invoice.id}",
+            "message": f"Case created for {case.company_name}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/cases")
 def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
     """
