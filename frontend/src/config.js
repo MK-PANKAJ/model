@@ -14,6 +14,9 @@ export const API = {
     INGEST: `${BASE_URL}/api/v1/ingest`,
     PAYMENT: `${BASE_URL}/api/v1/payment/create`,
     CASES: `${BASE_URL}/api/v1/cases`,
+    LOG_INTERACTION: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/log_interaction`,
+    UPDATE_STATUS: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/status`,
+    CREATE_CASE: `${BASE_URL}/api/v1/cases/create`,
 };
 
 export default API;

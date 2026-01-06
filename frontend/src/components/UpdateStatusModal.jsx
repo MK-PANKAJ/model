@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import API from '../config';
 
 export default function UpdateStatusModal({ caseId, currentStatus, companyName, onClose, onSuccess }) {
     const [selectedStatus, setSelectedStatus] = useState('');
@@ -38,7 +39,7 @@ export default function UpdateStatusModal({ caseId, currentStatus, companyName, 
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(
-                `https://recoverai-backend-7k3o2t7hcq-uc.a.run.app/api/v1/cases/${caseId}/status`,
+                API.UPDATE_STATUS(caseId),
                 {
                     method: 'PATCH',
                     headers: {

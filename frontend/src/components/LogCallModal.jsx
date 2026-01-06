@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import API from '../config';
 
 export default function LogCallModal({ caseId, companyName, onClose, onSuccess }) {
     const [interactionText, setInteractionText] = useState('');
@@ -17,7 +18,7 @@ export default function LogCallModal({ caseId, companyName, onClose, onSuccess }
 
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`https://recoverai-backend-7k3o2t7hcq-uc.a.run.app/api/v1/cases/${caseId}/log_interaction`, {
+            const response = await fetch(API.LOG_INTERACTION(caseId), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

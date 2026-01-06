@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import API from '../config';
 
 export default function AddCaseModal({ onClose, onSuccess }) {
     const [formData, setFormData] = useState({
@@ -17,7 +18,7 @@ export default function AddCaseModal({ onClose, onSuccess }) {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('https://recoverai-backend-7k3o2t7hcq-uc.a.run.app/api/v1/cases/create', {
+            const response = await fetch(API.CREATE_CASE, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
