@@ -1,16 +1,18 @@
 import stripe
 import os
 
-# Configure Stripe (User must set STRIPE_SECRET_KEY in Cloud Run Env Vars)
-# Defaulting to a dummy placeholder to prevent crash on startup if missing
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder_key_must_be_set_in_env_vars")
+# Configure Stripe
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 def create_payment_link(case_id: str, amount: float, currency: str = "inr"):
     """
     Generates a Stripe Checkout Session URL for a specific debt case.
     """
     try:
-        domain_url = os.getenv("DOMAIN_URL", "https://MK-PANKAJ.github.io/model") # Default to GitHub Pages
+        if not stripe.api_key:
+            return {"error": "Stripe API Key is missing. Set STRIPE_SECRET_KEY in Cloud Run environment variables."}
+
+        domain_url = os.getenv("DOMAIN_URL", "https://MK-PANKAJ.github.io/model")
 
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
