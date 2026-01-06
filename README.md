@@ -53,6 +53,3 @@ docker-compose up --build
 
 ---
 
-## 5. ROI & Business Case
-*   **TargetNet Value:** $26.9 Million / Year
-*   **Primary Lever:** +3% Recovery Rate Uplift via RISKON Intelligence.
