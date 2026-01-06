@@ -582,9 +582,8 @@ async def handle_voice_webhook(request: Request):
     """
     form_data = await request.form()
     number_to_dial = form_data.get("To")
-    # case_id and caller_id can be passed as a custom parameter in the dial connection
+    # case_id can be passed as a custom parameter in the dial connection
     case_id = form_data.get("case_id", "UNKNOWN")
-    dynamic_caller_id = form_data.get("caller_id")
 
     response = VoiceResponse()
     
@@ -597,7 +596,7 @@ async def handle_voice_webhook(request: Request):
     # Connect to Debtor + Enable Recording
     # recording_status_callback will trigger our analysis loop
     dial = response.dial(
-        caller_id=dynamic_caller_id or os.getenv("TWILIO_CALLER_ID", "+1234567890"),
+        caller_id=os.getenv("TWILIO_CALLER_ID", "+1234567890"),
         record="record-from-ringing-dual",
         recording_status_callback=f"{os.getenv('DOMAIN_URL')}/api/v1/telephony/recording_complete?case_id={case_id}",
         recording_status_callback_event="completed"

@@ -301,8 +301,7 @@ function App() {
       const call = await device.connect({
         params: {
           To: debtorPhone,
-          case_id: caseId,
-          caller_id: agentSettings.callerId // Pass dynamic caller ID from settings
+          case_id: caseId
         }
       });
 
@@ -456,11 +455,11 @@ function App() {
           <div className="bg-white p-6 rounded-xl shadow-2xl w-96 border border-gray-100">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Agent Settings</h3>
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Your Real Number (Caller ID)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Agent Identity (Internal)</label>
               <input
-                type="tel"
+                type="text"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="+91 98765 43210"
+                placeholder="Agent Name or ID"
                 value={agentSettings.callerId}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -468,9 +467,9 @@ function App() {
                   localStorage.setItem('agentCallerId', val);
                 }}
               />
-              <p className="text-[10px] text-gray-400 mt-2">This number will be displayed to debtors when you use the Recovery Bridge.</p>
+              <p className="text-[10px] text-gray-400 mt-2">This is your internal identifier. Outgoing calls use the company's Twilio Number.</p>
             </div>
-            <div className="flex justify-end">
+            Barb            <div className="flex justify-end">
               <button
                 onClick={() => setShowSettings(false)}
                 className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition"
