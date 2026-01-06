@@ -9,6 +9,7 @@ const BASE_URL = IS_DEVELOPMENT
 
 // 2. Export API Endpoints
 export const API = {
+    BASE_URL,
     LOGIN: `${BASE_URL}/token`,
     ANALYZE: `${BASE_URL}/api/v1/analyze`,
     INGEST: `${BASE_URL}/api/v1/ingest`,
@@ -20,6 +21,8 @@ export const API = {
     UPDATE_CONTACT: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/update_contact`,
     INITIATE_BRIDGE: `${BASE_URL}/api/v1/telephony/initiate_bridge`,
     CREATE_CASE: `${BASE_URL}/api/v1/cases/create`,
+    TELEPHONY_TOKEN: `${BASE_URL}/api/v1/telephony/token`,
+    VOICE_WEBHOOK: `${BASE_URL}/api/v1/telephony/voice`,
 };
 
 export default API;

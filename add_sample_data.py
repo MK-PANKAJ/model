@@ -4,6 +4,12 @@ Populates the database with realistic debt cases for testing and demo purposes.
 """
 
 from modules.database import SessionLocal, DebtorDB, InvoiceDB, Base, engine
+from modules.riskon_engine.model import RiskonODE
+from modules.allocation_core.agent import AllocationAgent
+
+# Initialize engines
+risk_engine = RiskonODE(decay_rate=0.03, boost_factor=0.15)
+allocation_agent = AllocationAgent(risk_engine)
 
 # Create tables if they don't exist
 Base.metadata.create_all(bind=engine)
@@ -34,6 +40,9 @@ SAMPLE_INVOICES = [
 
 def add_sample_data():
     db = SessionLocal()
+    print("\n" + "="*50)
+    print("RecoverAI - Sample Data Engine")
+    print("="*50)
     
     try:
         print("[*] Adding sample debtors...")
@@ -65,19 +74,51 @@ def add_sample_data():
             ).first()
             
             if existing_invoice:
-                print(f"  [SKIP] invoice for {debtor.name} (already exists)")
+                if existing_invoice.p_score == 0.0 or existing_invoice.decision == "PENDING":
+                    print(f"  [UPDATE] refreshing scores for {debtor.name}...")
+                    case_metadata = {
+                        "initial_score": debtor.credit_score,
+                        "age_days": invoice_data["age_days"],
+                        "history_logs": []
+                    }
+                    existing_invoice.p_score = risk_engine.predict_probability(
+                        case_metadata["initial_score"],
+                        case_metadata["age_days"],
+                        case_metadata["history_logs"]
+                    )
+                    decision_obj = allocation_agent.allocate_case(case_metadata)
+                    existing_invoice.decision = decision_obj["action"]
+                    existing_invoice.risk_level = "SAFE"
+                    print(f"    -> Prob: {existing_invoice.p_score:.2%}, Strategy: {existing_invoice.decision}")
+                else:
+                    print(f"  [SKIP] invoice for {debtor.name} (already has score)")
             else:
+                # 1. Calculate realistic initial score and strategy
+                case_metadata = {
+                    "initial_score": debtor.credit_score,
+                    "age_days": invoice_data["age_days"],
+                    "history_logs": [] # No logs yet for samples
+                }
+                
+                # Use the agent to calculate probability and decision
+                p_score = risk_engine.predict_probability(
+                    case_metadata["initial_score"],
+                    case_metadata["age_days"],
+                    case_metadata["history_logs"]
+                )
+                decision_obj = allocation_agent.allocate_case(case_metadata)
+
                 invoice = InvoiceDB(
                     debtor_id=debtor.id,
                     amount=invoice_data["amount"],
                     age_days=invoice_data["age_days"],
-                    p_score=0.0,  # Will be calculated when analyzed
-                    decision="PENDING",
-                    risk_level="UNKNOWN",
+                    p_score=p_score,
+                    decision=decision_obj["action"],
+                    risk_level="SAFE", # Default samples to SAFE
                     status="PENDING"
                 )
                 db.add(invoice)
-                print(f"  [OK] Added Rs.{invoice_data['amount']:,} invoice for {debtor.name}")
+                print(f"  [OK] Added Rs.{invoice_data['amount']:,} invoice for {debtor.name} (Prob: {p_score:.2%}, Strategy: {decision_obj['action']})")
         
         db.commit()
         

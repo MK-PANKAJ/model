@@ -272,7 +272,7 @@ function App() {
 
     try {
       // 1. Get Token from Backend
-      const tokenResp = await fetch(`${API.BASE_URL}/api/v1/telephony/token`, {
+      const tokenResp = await fetch(API.TELEPHONY_TOKEN, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (!tokenResp.ok) throw new Error("Could not fetch VOIP token");
