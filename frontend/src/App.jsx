@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import CaseCard from './components/CaseCard';
 import Login from './Login';
 import API from './config';
+import PaymentStatus from './components/PaymentStatus';
 
 // MOCK DATA SIMULATING THE ERP
 const MOCK_CASES = [
@@ -174,6 +175,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
+      <PaymentStatus />
       <header className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">RecoverAI <span className="text-blue-600">SuRaksha Portal</span></h1>
