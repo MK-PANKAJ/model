@@ -53,33 +53,66 @@ sentinel = Sentinel()
 def startup_event():
     print("--- STARTUP: Ensuring Database Tables ---")
     Base.metadata.create_all(bind=engine)
+    
     print("--- STARTUP: Initializing Admin User ---")
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        try:
-            user = db.query(UserDB).filter(UserDB.username == "admin").first()
-            if not user:
-                print("Creating default admin user...")
-                hashed_pw = get_password_hash("password123")
-                admin = UserDB(username="admin", hashed_password=hashed_pw)
-                db.add(admin)
-                db.commit()
-                print("Admin user created successfully.")
-            else:
-                # FORCE RESET PASSWORD (Self-Healing for MVP)
-                print("Admin exists. Resetting password to ensure compatibility...")
-                hashed_pw = get_password_hash("password123")
-                user.hashed_password = hashed_pw
-                db.commit()
-                print("Admin password reset successfully.")
-        except Exception as e:
-            print(f"Startup DB Error: {e}")
-            # Do NOT raise, just log it so the app can still start
-        finally:
-            db.close()
-    except Exception as outer_e:
-        print(f"Startup Critical Error: {outer_e}")
+        user = db.query(UserDB).filter(UserDB.username == "admin").first()
+        if not user:
+            print("Creating default admin user...")
+            hashed_pw = get_password_hash("password123")
+            admin = UserDB(username="admin", hashed_password=hashed_pw)
+            db.add(admin)
+            db.commit()
+            print("Admin user created successfully.")
+        else:
+            print("Admin exists. Resetting password...")
+            user.hashed_password = get_password_hash("password123")
+            db.commit()
+
+        # --- INITIALIZE SAMPLE DATA ---
+        initialize_sample_data(db)
+
+    except Exception as e:
+        print(f"Startup Error: {e}")
+    finally:
+        db.close()
     print("--- STARTUP: Complete ---")
+
+def initialize_sample_data(db: Session):
+    """
+    Bootstraps 3 sample cases if the database is empty.
+    """
+    total_invoices = db.query(InvoiceDB).count()
+    if total_invoices > 0:
+        print(f"Database has {total_invoices} invoices. Skipping sample data.")
+        return
+
+    print("Populating empty database with sample collection cases...")
+    samples = [
+        {"name": "Global Logistics Ltd", "amount": 250000, "age": 45, "score": 0.85, "phone": "+15550101"},
+        {"name": "SolarTech Systems", "amount": 12000, "age": 120, "score": 0.25, "phone": "+15550202"},
+        {"name": "Metro Retailers", "amount": 8500, "age": 15, "score": 0.95, "phone": "+15550303"}
+    ]
+
+    for s in samples:
+        debtor = DebtorDB(name=s["name"], credit_score=s["score"], phone=s["phone"], is_sample=1)
+        db.add(debtor)
+        db.commit()
+        db.refresh(debtor)
+
+        invoice = InvoiceDB(
+            debtor_id=debtor.id,
+            amount=s["amount"],
+            age_days=s["age"],
+            p_score=0.0,
+            decision="PENDING",
+            status="PENDING"
+        )
+        db.add(invoice)
+        db.commit()
+    
+    print(f"Successfully added {len(samples)} sample cases.")
 
 # --- DATA MODELS ---
 # --- AUTH ENDPOINT ---
@@ -719,6 +752,7 @@ def initiate_telephony_bridge(request: BridgeRequest, current_user: str = Depend
 class ManualCaseRequest(BaseModel):
     company_name: str
     amount: float
+    age_days: int
     credit_score: float
     phone: Optional[str] = None
 
