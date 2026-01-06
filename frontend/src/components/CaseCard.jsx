@@ -16,6 +16,11 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     const { case_id, companyName, phone: initialPhone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
     const [phone, setPhone] = useState(initialPhone);
 
+    // Sync state if props change (e.g. from polling)
+    React.useEffect(() => {
+        setPhone(initialPhone);
+    }, [initialPhone]);
+
     const handleUpdatePhone = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -31,6 +36,7 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
             if (response.ok) {
                 setPhone(newPhone);
                 setEditingPhone(false);
+                if (onLogCall) onLogCall(); // Refresh parent state
             }
         } catch (err) {
             console.error("Failed to update phone", err);
@@ -67,17 +73,29 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
                 <div className="w-1/3">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
-                        {phone ? (
-                            <button
-                                onClick={() => {
-                                    onCall(phone);
-                                    setShowLogModal(true);
-                                }}
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shadow-sm"
-                                title={`Direct Browser Call to ${phone}`}
-                            >
-                                📞
-                            </button>
+                        {phone && !editingPhone ? (
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => {
+                                        onCall(phone);
+                                        setShowLogModal(true);
+                                    }}
+                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shadow-sm"
+                                    title={`Direct Browser Call to ${phone}`}
+                                >
+                                    📞
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setNewPhone(phone);
+                                        setEditingPhone(true);
+                                    }}
+                                    className="text-[10px] text-gray-400 hover:text-blue-500"
+                                    title="Edit Number"
+                                >
+                                    ✎
+                                </button>
+                            </div>
                         ) : (
                             !editingPhone ? (
                                 <button
@@ -88,16 +106,21 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
                                     + Phone
                                 </button>
                             ) : (
-                                <div className="flex gap-1">
+                                <div className="flex gap-1 items-center bg-gray-50 p-1 rounded border border-blue-100">
                                     <input
                                         type="tel"
-                                        className="text-xs border rounded px-1 w-24"
+                                        autoFocus
+                                        className="text-xs border-none bg-transparent outline-none w-24"
                                         placeholder="Mobile No."
                                         value={newPhone}
                                         onChange={(e) => setNewPhone(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleUpdatePhone();
+                                            if (e.key === 'Escape') setEditingPhone(false);
+                                        }}
                                     />
-                                    <button onClick={handleUpdatePhone} className="text-xs text-green-600 font-bold">✓</button>
-                                    <button onClick={() => setEditingPhone(false)} className="text-xs text-red-600 font-bold">×</button>
+                                    <button onClick={handleUpdatePhone} className="text-xs text-green-600 font-bold hover:scale-110 transition-transform">✓</button>
+                                    <button onClick={() => setEditingPhone(false)} className="text-xs text-red-400 font-bold hover:scale-110 transition-transform">×</button>
                                 </div>
                             )
                         )}
