@@ -4,6 +4,7 @@ from main import app
 from modules.database import Base, engine
 
 # Create all tables with updated schema before running tests
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 from modules.security import verify_token
