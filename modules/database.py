@@ -35,6 +35,10 @@ class InvoiceDB(Base):
     # AI Scores
     p_score = Column(Float, default=0.0)
     decision = Column(String, default="PENDING")
+    # Sentinel Compliance
+    risk_level = Column(String, default="UNKNOWN")
+    # Payment Status
+    status = Column(String, default="PENDING")  # PENDING | PAID
 
 class UserDB(Base):
     __tablename__ = "users"

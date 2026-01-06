@@ -142,6 +142,13 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: st
         case.history_logs
     )
 
+    # --- SENTINEL COMPLIANCE CHECK ---
+    # Simulate a transcript for compliance scanning
+    # In production, this would be real interaction text
+    simulated_transcript = f"Regarding outstanding debt of {case.amount} from {case.company_name}"
+    compliance_result = sentinel.scan_interaction(simulated_transcript)
+    risk_level = compliance_result.get("risk_level", "UNKNOWN")
+
     # --- SAVE TO DB (PERSISTENCE) ---
     # 1. Check if debtor exists, else create
     debtor = db.query(DebtorDB).filter(DebtorDB.name == case.company_name).first()
@@ -157,7 +164,8 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: st
         amount=case.amount,
         age_days=case.age_days,
         p_score=raw_score,
-        decision=decision["action"]
+        decision=decision["action"],
+        risk_level=risk_level
     )
     db.add(db_invoice)
     db.commit()
@@ -166,6 +174,7 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: st
         "case_id": case.case_id,
         "riskon_score": round(raw_score, 4),
         "allocation_decision": decision,
+        "compliance": {"risk_level": risk_level},
         "db_status": "SAVED"
     }
 
@@ -196,9 +205,32 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
             "history": [], # Placeholder until InteractionLog table is linked
             "pScore": inv.p_score,
             "suggestedAction": inv.decision,
-            "status": inv.status
+            "status": inv.status,
+            "riskLevel": inv.risk_level if inv.risk_level else "UNKNOWN"
         })
     return results
+
+@app.get("/api/v1/payment/success")
+def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
+    """
+    Stripe redirects here after successful payment.
+    Updates invoice status to PAID.
+    """
+    try:
+        # Extract numeric ID from case_id like "C-123"
+        invoice_id = int(case_id.replace("C-", ""))
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        
+        if invoice:
+            invoice.status = "PAID"
+            db.commit()
+            # Redirect to frontend with success banner
+            domain = os.getenv("DOMAIN_URL", "https://MK-PANKAJ.github.io/model")
+            return {"status": "success", "redirect": f"{domain}?payment=success&case_id={case_id}"}
+        else:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case_id format")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

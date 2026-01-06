@@ -25,7 +25,7 @@ def create_payment_link(case_id: str, amount: float, currency: str = "inr"):
                 'quantity': 1,
             }],
             mode='payment',
-            success_url=domain_url + '?payment=success&case_id=' + case_id,
+            success_url=f"{domain_url}/api/v1/payment/success?case_id={case_id}",
             cancel_url=domain_url + '?payment=cancelled',
         )
         return {"payment_url": session.url}
