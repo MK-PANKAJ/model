@@ -38,6 +38,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [paymentModal, setPaymentModal] = useState({ show: false, link: '', caseId: '', company: '' });
 
   // Check for existing session
   useEffect(() => {
@@ -47,6 +48,19 @@ function App() {
       fetchCases(savedToken); // Load data immediately
     }
   }, []);
+
+  // 2. AUTO-REFRESH (POLLING) TO UPDATE STATUS
+  // This ensures the Agent sees "PAID" automatically when the Debtor pays remotely
+  useEffect(() => {
+    if (!token) return;
+
+    // Poll the database every 10 seconds to check for status updates
+    const interval = setInterval(() => {
+      fetchCases(token);
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(interval);
+  }, [token]);
 
   const fetchCases = async (authToken) => {
     try {
@@ -164,7 +178,13 @@ function App() {
 
       const data = await response.json();
       if (data.payment_url) {
-        window.location.href = data.payment_url;
+        // Show the link to the Agent instead of redirecting
+        setPaymentModal({
+          show: true,
+          link: data.payment_url,
+          caseId: caseData.case_id,
+          company: caseData.companyName
+        });
       } else {
         alert("Error: " + JSON.stringify(data));
       }
@@ -246,6 +266,45 @@ function App() {
           />
         ))}
       </div>
+
+      {paymentModal && paymentModal.show && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl shadow-2xl w-[32rem] border border-gray-100">
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Payment Link Generated</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Share this secure link with <span className="font-semibold text-gray-700">{paymentModal.company}</span>.
+              When they pay, this case will automatically mark as PAID.
+            </p>
+
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                readOnly
+                value={paymentModal.link}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-600 text-sm rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(paymentModal.link);
+                  alert("Link copied to clipboard!");
+                }}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-medium text-sm transition"
+              >
+                Copy
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setPaymentModal({ ...paymentModal, show: false })}
+                className="text-gray-500 hover:text-gray-700 text-sm font-medium px-4 py-2"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
