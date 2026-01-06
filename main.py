@@ -765,7 +765,10 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
     """
     results = []
     # Join Invoice with Debtor to get company name
-    invoices = db.query(InvoiceDB, DebtorDB).join(DebtorDB, InvoiceDB.debtor_id == DebtorDB.id).filter(InvoiceDB.status == "PENDING").all()
+    # Show all active cases (Except those already resolved or closed)
+    invoices = db.query(InvoiceDB, DebtorDB).join(DebtorDB, InvoiceDB.debtor_id == DebtorDB.id).filter(
+        InvoiceDB.status.notin_(["RESOLVED", "CLOSED"])
+    ).all()
     
     for inv, debtor in invoices:
         # Fetch interaction logs for this invoice

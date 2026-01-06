@@ -6,47 +6,42 @@ class RiskonODE:
         self.decay_rate = decay_rate  # 'k': How fast hope dies (5% per day)
         self.boost_factor = boost_factor # 'I': Impact of a DCA call
 
-    def recovery_dynamics(self, P, t, weighted_interactions):
-        """
-        The Differential Equation: dP/dt = -kP + Weighted_Interaction_Effect
-        weighted_interactions: dict of {day: boost_weight}
-        """
-        # 1. Natural Decay
-        dP_dt = -self.decay_rate * P
-        
-        # 2. Weighted Interaction Boost
-        day = int(t)
-        if day in weighted_interactions:
-            # boost_weight is a multiplier (e.g., 2.0 for PTP, 0.5 for neutral)
-            dP_dt += self.boost_factor * weighted_interactions[day]
-            
-        return dP_dt
-
     def predict_probability(self, initial_prob, days_overdue, interaction_data):
         """
-        Solves the ODE to predict current Probability of Recovery.
-        
-        :param initial_prob: Starting score (0.0 to 1.0)
-        :param days_overdue: How many days has the invoice been open?
-        :param interaction_data: List of dicts: {'day': int, 'weight': float}
+        Predicts Probability using a robust time-step integration.
+        We use a step-based approach to ensure DCA boosts are accurately captured.
         """
-        # Convert interaction_data to dictionary for fast lookup
-        weighted_interactions = {item['day']: item['weight'] for item in interaction_data}
-
-        # Time steps (0 to days_overdue)
-        t = np.linspace(0, days_overdue, days_overdue + 1)
+        # 1. Setup
+        dt = 0.1 # 0.1 day resolution
+        P = float(initial_prob)
+        total_days = int(days_overdue)
+        steps = int(total_days / dt)
         
-        # Solve ODE
-        solution = odeint(
-            self.recovery_dynamics, 
-            initial_prob, 
-            t, 
-            args=(weighted_interactions,)
-        )
+        # 2. Daily Boost Dictionary
+        boosts = {int(item['day']): float(item['weight']) for item in interaction_data}
         
-        # Return the final probability (clamped between 0 and 1)
-        current_probability = max(0.0, min(1.0, solution[-1][0]))
-        return current_probability
+        # 3. Integration Loop
+        applied_days = set() # Ensure boost applies once per day
+        
+        for i in range(steps):
+            t = i * dt
+            day = int(t)
+            
+            # A. Continuous Decay
+            dP = -self.decay_rate * P * dt
+            
+            # B. Discrete Boost (Agentic Nudge)
+            if day in boosts and day not in applied_days:
+                # The boost is an impulse added to the probability
+                P += self.boost_factor * boosts[day]
+                applied_days.add(day)
+            
+            P += dP
+            
+            # Clamp during integration to prevent overflow/negative
+            P = max(0.0, min(P, 1.0))
+            
+        return round(float(P), 4)
 
 # --- SIMULATION ---
 if __name__ == "__main__":
