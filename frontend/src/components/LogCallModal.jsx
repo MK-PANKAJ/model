@@ -123,6 +123,9 @@ export default function LogCallModal({ caseId, companyName, onClose, onSuccess }
                         <h2 className="text-2xl font-bold text-gray-800">Log Call</h2>
                         <div className="flex items-center gap-2">
                             <p className="text-sm text-gray-500">{companyName}</p>
+                            {!mediaRecorder && (
+                                <p className="text-xs text-indigo-600 italic">Call the customer manually and record the interaction below.</p>
+                            )}
                             {recording && (
                                 <span className="flex items-center gap-1 text-xs text-red-600 font-bold animate-pulse">
                                     <span className="w-2 h-2 bg-red-600 rounded-full"></span>

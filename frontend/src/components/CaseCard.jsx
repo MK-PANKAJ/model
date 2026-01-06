@@ -2,15 +2,40 @@ import React, { useState } from 'react';
 import LogCallModal from './LogCallModal';
 import StatusBadge from './StatusBadge';
 import UpdateStatusModal from './UpdateStatusModal';
+import { API } from '../config';
 
 // The "Smart Card" that displays the ODE Score and Suggested Action
-const CaseCard = ({ caseData, onPay, onLogCall }) => {
+const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     const [showLogModal, setShowLogModal] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
+    const [editingPhone, setEditingPhone] = useState(false);
+    const [newPhone, setNewPhone] = useState('');
 
     // Destructure data from the RISKON Engine
-    const { case_id, companyName, phone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
+    const { case_id, companyName, phone: initialPhone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
+    const [phone, setPhone] = useState(initialPhone);
+
+    const handleUpdatePhone = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(API.UPDATE_CONTACT(case_id), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ phone: newPhone })
+            });
+
+            if (response.ok) {
+                setPhone(newPhone);
+                setEditingPhone(false);
+            }
+        } catch (err) {
+            console.error("Failed to update phone", err);
+        }
+    };
 
     // Dynamic Styling based on Recovery Probability (ODE Score)
     const getPriorityColor = (score) => {
@@ -42,15 +67,39 @@ const CaseCard = ({ caseData, onPay, onLogCall }) => {
                 <div className="w-1/3">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
-                        {phone && (
-                            <a
-                                href={`tel:${phone}`}
-                                onClick={() => setShowLogModal(true)}
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 transition-colors"
-                                title="Click to Call"
+                        {phone ? (
+                            <button
+                                onClick={() => {
+                                    onCall(phone);
+                                    setShowLogModal(true);
+                                }}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shadow-sm"
+                                title={`Direct Browser Call to ${phone}`}
                             >
                                 📞
-                            </a>
+                            </button>
+                        ) : (
+                            !editingPhone ? (
+                                <button
+                                    onClick={() => setEditingPhone(true)}
+                                    className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded hover:bg-gray-200"
+                                    title="Add contact number"
+                                >
+                                    + Phone
+                                </button>
+                            ) : (
+                                <div className="flex gap-1">
+                                    <input
+                                        type="tel"
+                                        className="text-xs border rounded px-1 w-24"
+                                        placeholder="Mobile No."
+                                        value={newPhone}
+                                        onChange={(e) => setNewPhone(e.target.value)}
+                                    />
+                                    <button onClick={handleUpdatePhone} className="text-xs text-green-600 font-bold">✓</button>
+                                    <button onClick={() => setEditingPhone(false)} className="text-xs text-red-600 font-bold">×</button>
+                                </div>
+                            )
                         )}
                         <StatusBadge status={status} />
                     </div>

@@ -6,7 +6,7 @@ import io
 def process_csv_upload(file_contents: bytes, db: Session):
     """
     Reads a FedEx CSV export and ingests it into Cloud SQL.
-    Expected Columns: 'company_name', 'amount', 'age_days', 'credit_score'
+    Expected Columns: 'company_name', 'amount', 'age_days', 'credit_score', 'phone'
     """
     try:
         # Load CSV into Pandas DataFrame
@@ -46,7 +46,8 @@ def process_csv_upload(file_contents: bytes, db: Session):
                 
                 debtor = db.query(DebtorDB).filter(DebtorDB.name == debtor_name).first()
                 if not debtor:
-                    debtor = DebtorDB(name=debtor_name, credit_score=credit_score, is_sample=0)
+                    phone = str(row.get("phone", ""))
+                    debtor = DebtorDB(name=debtor_name, credit_score=credit_score, phone=phone, is_sample=0)
                     db.add(debtor)
                     db.commit()
                     db.refresh(debtor)

@@ -509,6 +509,49 @@ def update_case_status(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+class ContactUpdateRequest(BaseModel):
+    phone: str
+
+@app.post("/api/v1/cases/{case_id}/update_contact")
+def update_contact(case_id: str, request: ContactUpdateRequest, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    """
+    Update debtor phone number.
+    """
+    try:
+        invoice_id = int(case_id.replace("C-", ""))
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Case not found")
+            
+        debtor = db.query(DebtorDB).filter(DebtorDB.id == invoice.debtor_id).first()
+        debtor.phone = request.phone
+        db.commit()
+        
+        return {"status": "success", "phone": debtor.phone}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class BridgeRequest(BaseModel):
+    agent_phone: str
+    debtor_phone: str
+
+@app.post("/api/v1/telephony/initiate_bridge")
+def initiate_telephony_bridge(request: BridgeRequest, current_user: str = Depends(verify_token)):
+    """
+    Simulates a Twilio Programmable Voice Bridge.
+    In production: Call Twilio API to connect Agent's Number to Debtor's Number.
+    """
+    print(f"[TELEPHONY BRIDGE] Initiating secure VOIP bridge...")
+    print(f"[BRIDGE] Source: {request.agent_phone}")
+    print(f"[BRIDGE] Target: {request.debtor_phone}")
+    print(f"[BRIDGE] Recording: ENABLED (AI Sentinel Active)")
+    
+    return {
+        "status": "success",
+        "bridge_id": f"BRG-{datetime.utcnow().timestamp()}",
+        "message": "Cloud Bridge Established. Ringing Agent now."
+    }
+
 class ManualCaseRequest(BaseModel):
     company_name: str
     amount: float
