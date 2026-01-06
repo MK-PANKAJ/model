@@ -238,6 +238,7 @@ def log_interaction(
             created_at=datetime.utcnow().isoformat(),
             interaction_text=interaction.text,
             risk_level=compliance_result.get("risk_level", "UNKNOWN"),
+            intent=compliance_result.get("intent", "GENERAL"),
             sentiment_score=compliance_result.get("sentiment_score", 0.0),
             violation_flags=json.dumps(compliance_result.get("violation_flags", []))
         )
@@ -263,7 +264,7 @@ def log_interaction(
             
             # Determine weight: Sentiment (-1 to 1) + Intent Bonus
             weight = 1.0 + log.sentiment_score
-            if compliance_result.get("intent") == "PTP": weight += 1.0
+            if log.intent == "PTP": weight += 1.0
             if log.risk_level == "CRITICAL": weight -= 2.0
             
             interaction_data.append({"day": day, "weight": max(0.0, weight)})
@@ -377,6 +378,7 @@ async def analyze_audio_interaction(
             created_at=datetime.utcnow().isoformat(),
             interaction_text=f"[VOICE RECORDING] {analysis.get('transcript', '')}",
             risk_level=analysis.get("risk_level", "UNKNOWN"),
+            intent=analysis.get("intent", "GENERAL"),
             sentiment_score=0.0, # STT might not give sentiment directly yet
             violation_flags=json.dumps(analysis.get("violation_flags", []))
         )
@@ -389,8 +391,11 @@ async def analyze_audio_interaction(
         interaction_data = []
         for log in all_logs:
             day = (log.id * 7) % (invoice.age_days + 1) 
-            weight = 1.0 # Default
-            if analysis.get("intent") == "PTP": weight += 1.0
+            # Determine weight: Sentiment (-1 to 1) + Intent Bonus
+            weight = 1.0 + log.sentiment_score
+            if log.intent == "PTP": weight += 1.0
+            if log.risk_level == "CRITICAL": weight -= 2.0
+            
             interaction_data.append({"day": day, "weight": max(0.0, weight)})
 
         invoice.p_score = risk_engine.predict_probability(
