@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request, Form, Response, Depends, st
 from pydantic import BaseModel
 import os
 from datetime import datetime
+from typing import List, Optional
 from dotenv import load_dotenv
 load_dotenv() # Load variables from .env if present
 
