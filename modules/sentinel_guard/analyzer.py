@@ -45,12 +45,14 @@ class Sentinel:
                 prompt = f"""
                 Analyze the following debt collection transcript as a Compliance Officer.
                 Check for harassment, threats, or FDCPA violations.
+                Also, identify if the debtor made a "Promise to Pay" (PTP).
                 Transcript: "{text_content}"
                 
                 Respond ONLY with valid JSON:
                 {{
                     "risk_level": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
                     "violation_flags": ["list of specific issues found"],
+                    "intent": "PTP" | "DISPUTE" | "REFUSAL" | "GENERAL",
                     "reasoning": "brief explanation"
                 }}
                 """
@@ -88,13 +90,59 @@ class Sentinel:
         elif sentiment_score < -0.1:
             risk_level = "MEDIUM"
             
+        # INTENT CHECK (Basic Rules)
+        intent = "GENERAL"
+        ptp_keywords = ["pay", "tomorrow", "friday", "monday", "promise", "send", "payment", "clear"]
+        if any(word in text_lower for word in ptp_keywords) and sentiment_score > -0.1:
+            intent = "PTP"
+        elif "dispute" in text_lower or "wrong" in text_lower:
+            intent = "DISPUTE"
+            
         return {
             "risk_level": risk_level,
             "sentiment_score": round(sentiment_score, 2),
             "violation_flags": flags,
+            "intent": intent,
             "audit_recommendation": "Human Review" if risk_level in ["HIGH", "CRITICAL"] else "Auto-Approve",
             "source": "Rules Engine (VADER)"
         }
+
+    async def analyze_audio(self, audio_content, mime_type="audio/webm"):
+        """
+        Multimodal Audio analysis using Gemini.
+        """
+        if not self.model:
+            return {"error": "AI Model not available for audio analysis"}
+
+        try:
+            # Prepare multimodal prompt
+            prompt = """
+            Listen to this debt collection call recording. 
+            1. Transcribe the conversation accurately.
+            2. Analyze for FDCPA compliance (harassment, threats).
+            3. Identify debtor intent (Promise to Pay, Dispute, etc.).
+            
+            Respond ONLY with JSON:
+            {
+                "transcript": "...",
+                "risk_level": "LOW" | "CRITICAL",
+                "violation_flags": [],
+                "intent": "PTP" | "GENERAL",
+                "reasoning": "..."
+            }
+            """
+            
+            # Send audio bytes directly to Gemini
+            response = self.model.generate_content([
+                prompt,
+                {"mime_type": mime_type, "data": audio_content}
+            ])
+            
+            raw_json = response.text.replace("```json", "").replace("```", "")
+            return json.loads(raw_json)
+        except Exception as e:
+            print(f"Sentinel Audio Error: {e}")
+            return {"error": str(e)}
 
 # --- SIMULATION ---
 if __name__ == "__main__":

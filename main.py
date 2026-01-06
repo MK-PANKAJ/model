@@ -222,32 +222,82 @@ def log_interaction(
             violation_flags=json.dumps(compliance_result.get("violation_flags", []))
         )
         db.add(log_entry)
+        db.flush() # Ensure log has an ID and is visible for subsequent queries
+        
+        # --- AGENTIC AUTO-UPDATES ---
+        
+        # 1. ANALYZE INTENT & RECALCULATE SCORE
+        # Fetch debtor for initial credit score
+        debtor = db.query(DebtorDB).filter(DebtorDB.id == invoice.debtor_id).first()
+        
+        # Calculate interaction weights for ODE
+        # We'll map logs to days relative to invoice age
+        all_logs = db.query(InteractionLogDB).filter(InteractionLogDB.invoice_id == invoice_id).all()
+        interaction_data = []
+        for log in all_logs:
+            # For simulation, we'll assign random distinct days if multiples occur same day
+            # In a real system, we'd use timestamps. Here we'll use log sequence as 'days' proxy
+            # or just assume they happen at regular intervals within the age_days.
+            # Simpler: use log.id % age_days as a stable pseudo-day
+            day = (log.id * 7) % (invoice.age_days + 1) 
+            
+            # Determine weight: Sentiment (-1 to 1) + Intent Bonus
+            weight = 1.0 + log.sentiment_score
+            if compliance_result.get("intent") == "PTP": weight += 1.0
+            if log.risk_level == "CRITICAL": weight -= 2.0
+            
+            interaction_data.append({"day": day, "weight": max(0.0, weight)})
+
+        # Recalculate p_score
+        new_p_score = risk_engine.predict_probability(
+            initial_prob=debtor.credit_score,
+            days_overdue=invoice.age_days,
+            interaction_data=interaction_data
+        )
+        invoice.p_score = new_p_score
+
+        # 2. AUTOMATED STATUS TRANSITIONS
+        timestamp = datetime.utcnow().isoformat()
         
         # Auto-update status to IN_PROGRESS on first interaction (if PENDING)
         if invoice.status == "PENDING":
             old_status = invoice.status
             invoice.status = "IN_PROGRESS"
-            timestamp = datetime.utcnow().isoformat()
             
             status_history = StatusHistoryDB(
                 invoice_id=invoice_id,
                 old_status=old_status,
                 new_status="IN_PROGRESS",
-                changed_by=current_user,
+                changed_by="SYSTEM",
                 changed_at=timestamp,
                 reason="First interaction logged",
                 auto_updated=1
             )
             db.add(status_history)
         
+        # Auto-update status to UNDER_REVIEW if PTP (Promise to Pay) Detected
+        if compliance_result.get("intent") == "PTP" and invoice.status == "IN_PROGRESS":
+            old_status = invoice.status
+            invoice.status = "UNDER_REVIEW"
+            
+            ptp_history = StatusHistoryDB(
+                invoice_id=invoice_id,
+                old_status=old_status,
+                new_status="UNDER_REVIEW",
+                changed_by="SYSTEM",
+                changed_at=timestamp,
+                reason="Promise to Pay detected by AI Sentinel",
+                auto_updated=1
+            )
+            db.add(ptp_history)
+
         # If critical risk, update invoice risk_level and escalate
         if compliance_result.get("risk_level") == "CRITICAL":
             invoice.risk_level = "CRITICAL"
-            # Auto-escalate if in progress
-            if invoice.status == "IN_PROGRESS":
+            # Auto-escalate
+            if invoice.status in ["IN_PROGRESS", "UNDER_REVIEW"]:
                 old_status = invoice.status
                 invoice.status = "ESCALATED"
-                timestamp = datetime.utcnow().isoformat()
                 
                 escalate_history = StatusHistoryDB(
                     invoice_id=invoice_id,
@@ -267,11 +317,82 @@ def log_interaction(
             "status": "success",
             "log_id": log_entry.id,
             "compliance": compliance_result,
-            "message": "Interaction logged successfully"
+            "new_p_score": round(invoice.p_score, 4),
+            "new_invoice_status": invoice.status,
+            "message": "Interaction logged and analyzed. Case probability & status updated."
         }
         
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid case_id format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/cases/{case_id}/analyze_audio")
+async def analyze_audio_interaction(
+    case_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(verify_token)
+):
+    """
+    Multimodal: Receive audio recording -> Gemini STT + Compliance -> Log to DB
+    """
+    try:
+        content = await file.read()
+        analysis = await sentinel.analyze_audio(content, file.content_type)
+        
+        if "error" in analysis:
+            raise HTTPException(status_code=500, detail=analysis["error"])
+            
+        # Log the result just like a manual text log
+        invoice_id = int(case_id.replace("C-", ""))
+        invoice = db.query(InvoiceDB).filter(InvoiceDB.id == invoice_id).first()
+        
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Case not found")
+            
+        # Create log entry from transcript
+        log_entry = InteractionLogDB(
+            invoice_id=invoice_id,
+            created_at=datetime.utcnow().isoformat(),
+            interaction_text=f"[VOICE RECORDING] {analysis.get('transcript', '')}",
+            risk_level=analysis.get("risk_level", "UNKNOWN"),
+            sentiment_score=0.0, # STT might not give sentiment directly yet
+            violation_flags=json.dumps(analysis.get("violation_flags", []))
+        )
+        db.add(log_entry)
+        db.flush()
+
+        # Recalculate score (Shared Logic)
+        debtor = db.query(DebtorDB).filter(DebtorDB.id == invoice.debtor_id).first()
+        all_logs = db.query(InteractionLogDB).filter(InteractionLogDB.invoice_id == invoice_id).all()
+        interaction_data = []
+        for log in all_logs:
+            day = (log.id * 7) % (invoice.age_days + 1) 
+            weight = 1.0 # Default
+            if analysis.get("intent") == "PTP": weight += 1.0
+            interaction_data.append({"day": day, "weight": max(0.0, weight)})
+
+        invoice.p_score = risk_engine.predict_probability(
+            initial_prob=debtor.credit_score,
+            days_overdue=invoice.age_days,
+            interaction_data=interaction_data
+        )
+
+        # Status Update
+        if invoice.status == "PENDING":
+            invoice.status = "IN_PROGRESS"
+        if analysis.get("intent") == "PTP" and invoice.status == "IN_PROGRESS":
+            invoice.status = "UNDER_REVIEW"
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "analysis": analysis,
+            "new_p_score": round(invoice.p_score, 4),
+            "new_invoice_status": invoice.status
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -366,8 +487,8 @@ def update_case_status(
 class ManualCaseRequest(BaseModel):
     company_name: str
     amount: float
-    age_days: int
     credit_score: float
+    phone: Optional[str] = None
 
 @app.post("/api/v1/cases/create")
 def create_manual_case(case: ManualCaseRequest, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
@@ -378,7 +499,7 @@ def create_manual_case(case: ManualCaseRequest, db: Session = Depends(get_db), c
         # Create or get debtor
         debtor = db.query(DebtorDB).filter(DebtorDB.name == case.company_name).first()
         if not debtor:
-            debtor = DebtorDB(name=case.company_name, credit_score=case.credit_score, is_sample=0)
+            debtor = DebtorDB(name=case.company_name, credit_score=case.credit_score, phone=case.phone, is_sample=0)
             db.add(debtor)
             db.commit()
             db.refresh(debtor)
@@ -423,6 +544,7 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
         results.append({
             "case_id": f"C-{inv.id}", # Simple ID generation
             "companyName": debtor.name,
+            "phone": debtor.phone,
             "amount": inv.amount,
             "initial_score": debtor.credit_score,
             "age_days": inv.age_days,

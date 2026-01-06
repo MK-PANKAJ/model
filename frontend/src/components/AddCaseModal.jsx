@@ -6,7 +6,8 @@ export default function AddCaseModal({ onClose, onSuccess }) {
         company_name: '',
         amount: '',
         age_days: '',
-        credit_score: ''
+        credit_score: '',
+        phone: ''
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -28,7 +29,8 @@ export default function AddCaseModal({ onClose, onSuccess }) {
                     company_name: formData.company_name,
                     amount: parseFloat(formData.amount),
                     age_days: parseInt(formData.age_days),
-                    credit_score: parseFloat(formData.credit_score)
+                    credit_score: parseFloat(formData.credit_score),
+                    phone: formData.phone
                 })
             });
 

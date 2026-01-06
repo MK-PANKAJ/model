@@ -10,7 +10,7 @@ const CaseCard = ({ caseData, onPay, onLogCall }) => {
     const [showStatusModal, setShowStatusModal] = useState(false);
 
     // Destructure data from the RISKON Engine
-    const { case_id, companyName, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
+    const { case_id, companyName, phone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
 
     // Dynamic Styling based on Recovery Probability (ODE Score)
     const getPriorityColor = (score) => {
@@ -42,6 +42,16 @@ const CaseCard = ({ caseData, onPay, onLogCall }) => {
                 <div className="w-1/3">
                     <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-bold text-lg text-gray-800">{companyName}</h3>
+                        {phone && (
+                            <a
+                                href={`tel:${phone}`}
+                                onClick={() => setShowLogModal(true)}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 transition-colors"
+                                title="Click to Call"
+                            >
+                                📞
+                            </a>
+                        )}
                         <StatusBadge status={status} />
                     </div>
                     <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>

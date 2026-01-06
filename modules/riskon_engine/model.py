@@ -6,38 +6,42 @@ class RiskonODE:
         self.decay_rate = decay_rate  # 'k': How fast hope dies (5% per day)
         self.boost_factor = boost_factor # 'I': Impact of a DCA call
 
-    def recovery_dynamics(self, P, t, interactions):
+    def recovery_dynamics(self, P, t, weighted_interactions):
         """
-        The Differential Equation: dP/dt = -kP + Interaction_Effect
+        The Differential Equation: dP/dt = -kP + Weighted_Interaction_Effect
+        weighted_interactions: dict of {day: boost_weight}
         """
-        # 1. Natural Decay (The longer it waits, the lower P becomes)
+        # 1. Natural Decay
         dP_dt = -self.decay_rate * P
         
-        # 2. Interaction Boost (Did we call them today?)
-        # t is current time step. We check if an interaction happened at 'int(t)'
-        if int(t) in interactions:
-            dP_dt += self.boost_factor
+        # 2. Weighted Interaction Boost
+        day = int(t)
+        if day in weighted_interactions:
+            # boost_weight is a multiplier (e.g., 2.0 for PTP, 0.5 for neutral)
+            dP_dt += self.boost_factor * weighted_interactions[day]
             
         return dP_dt
 
-    def predict_probability(self, initial_prob, days_overdue, interaction_days):
+    def predict_probability(self, initial_prob, days_overdue, interaction_data):
         """
         Solves the ODE to predict current Probability of Recovery.
         
-        :param initial_prob: Starting score (0.0 to 1.0) based on credit score.
+        :param initial_prob: Starting score (0.0 to 1.0)
         :param days_overdue: How many days has the invoice been open?
-        :param interaction_days: List of days when DCA contacted debtor [3, 10, 15]
+        :param interaction_data: List of dicts: {'day': int, 'weight': float}
         """
+        # Convert interaction_data to dictionary for fast lookup
+        weighted_interactions = {item['day']: item['weight'] for item in interaction_data}
+
         # Time steps (0 to days_overdue)
         t = np.linspace(0, days_overdue, days_overdue + 1)
         
         # Solve ODE
-        # We pass 'args' to the function to handle the interactions list
         solution = odeint(
             self.recovery_dynamics, 
             initial_prob, 
             t, 
-            args=(interaction_days,)
+            args=(weighted_interactions,)
         )
         
         # Return the final probability (clamped between 0 and 1)

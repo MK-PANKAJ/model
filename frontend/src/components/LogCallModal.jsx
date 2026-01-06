@@ -4,8 +4,70 @@ import API from '../config';
 export default function LogCallModal({ caseId, companyName, onClose, onSuccess }) {
     const [interactionText, setInteractionText] = useState('');
     const [complianceResult, setComplianceResult] = useState(null);
+    const [recording, setRecording] = useState(false);
+    const [mediaRecorder, setMediaRecorder] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+
+            recorder.ondataavailable = (e) => chunks.push(e.data);
+            recorder.onstop = async () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                await uploadAudio(blob);
+            };
+
+            recorder.start();
+            setMediaRecorder(recorder);
+            setRecording(true);
+            setError('');
+        } catch (err) {
+            setError('Could not access microphone: ' + err.message);
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorder) {
+            mediaRecorder.stop();
+            setRecording(false);
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    const uploadAudio = async (blob) => {
+        setLoading(true);
+        const formData = new FormData();
+        formData.append('file', blob, 'recording.webm');
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(API.ANALYZE_AUDIO(caseId), {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error('Audio analysis failed');
+
+            const data = await response.json();
+            setInteractionText(data.analysis.transcript);
+            setComplianceResult(data.analysis);
+
+            // Success close
+            setTimeout(() => {
+                onSuccess();
+                onClose();
+            }, 3000);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const checkCompliance = async () => {
         if (!interactionText.trim()) {
@@ -59,7 +121,15 @@ export default function LogCallModal({ caseId, companyName, onClose, onSuccess }
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-800">Log Call</h2>
-                        <p className="text-sm text-gray-500">{companyName}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm text-gray-500">{companyName}</p>
+                            {recording && (
+                                <span className="flex items-center gap-1 text-xs text-red-600 font-bold animate-pulse">
+                                    <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+                                    LIVE RECORDING
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
@@ -140,13 +210,30 @@ export default function LogCallModal({ caseId, companyName, onClose, onSuccess }
                             {complianceResult ? 'Close' : 'Cancel'}
                         </button>
                         {!complianceResult && (
-                            <button
-                                onClick={checkCompliance}
-                                disabled={loading || !interactionText.trim()}
-                                className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {loading ? 'Checking Compliance...' : 'Log & Check Compliance'}
-                            </button>
+                            <>
+                                {!recording ? (
+                                    <button
+                                        onClick={startRecording}
+                                        className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
+                                    >
+                                        🎤 Start Recording
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={stopRecording}
+                                        className="flex-1 bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-black transition flex items-center justify-center gap-2"
+                                    >
+                                        ⏹ Stop & Analyze
+                                    </button>
+                                )}
+                                <button
+                                    onClick={checkCompliance}
+                                    disabled={loading || !interactionText.trim() || recording}
+                                    className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {loading ? 'Analyzing...' : 'Manual Log'}
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>

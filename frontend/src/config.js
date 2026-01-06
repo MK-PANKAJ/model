@@ -16,6 +16,7 @@ export const API = {
     CASES: `${BASE_URL}/api/v1/cases`,
     LOG_INTERACTION: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/log_interaction`,
     UPDATE_STATUS: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/status`,
+    ANALYZE_AUDIO: (caseId) => `${BASE_URL}/api/v1/cases/${caseId}/analyze_audio`,
     CREATE_CASE: `${BASE_URL}/api/v1/cases/create`,
 };
 
