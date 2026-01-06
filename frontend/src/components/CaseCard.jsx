@@ -9,8 +9,9 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     const [showLogModal, setShowLogModal] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
-    const [editingPhone, setEditingPhone] = useState(false);
     const [newPhone, setNewPhone] = useState('');
+    const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
+    const [phoneError, setPhoneError] = useState(null);
 
     // Destructure data from the RISKON Engine
     const { case_id, companyName, phone: initialPhone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
@@ -22,6 +23,14 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     }, [initialPhone]);
 
     const handleUpdatePhone = async () => {
+        if (!newPhone.trim()) {
+            setPhoneError("Phone number cannot be empty");
+            return;
+        }
+
+        setIsUpdatingPhone(true);
+        setPhoneError(null);
+
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(API.UPDATE_CONTACT(case_id), {
@@ -36,10 +45,16 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
             if (response.ok) {
                 setPhone(newPhone);
                 setEditingPhone(false);
-                if (onLogCall) onLogCall(); // Refresh parent state
+                if (onLogCall) onLogCall(); // Refresh parent cases
+            } else {
+                const errData = await response.json();
+                setPhoneError(errData.detail || "Update failed");
             }
         } catch (err) {
             console.error("Failed to update phone", err);
+            setPhoneError("Network error. Is the backend running?");
+        } finally {
+            setIsUpdatingPhone(false);
         }
     };
 
@@ -106,21 +121,32 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
                                     + Phone
                                 </button>
                             ) : (
-                                <div className="flex gap-1 items-center bg-gray-50 p-1 rounded border border-blue-100">
-                                    <input
-                                        type="tel"
-                                        autoFocus
-                                        className="text-xs border-none bg-transparent outline-none w-24"
-                                        placeholder="Mobile No."
-                                        value={newPhone}
-                                        onChange={(e) => setNewPhone(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleUpdatePhone();
-                                            if (e.key === 'Escape') setEditingPhone(false);
-                                        }}
-                                    />
-                                    <button onClick={handleUpdatePhone} className="text-xs text-green-600 font-bold hover:scale-110 transition-transform">✓</button>
-                                    <button onClick={() => setEditingPhone(false)} className="text-xs text-red-400 font-bold hover:scale-110 transition-transform">×</button>
+                                <div className="relative">
+                                    <div className={`flex gap-1 items-center bg-gray-50 p-1 rounded border ${phoneError ? 'border-red-500' : 'border-blue-100'} ${isUpdatingPhone ? 'opacity-50' : ''}`}>
+                                        <input
+                                            type="tel"
+                                            autoFocus
+                                            disabled={isUpdatingPhone}
+                                            className="text-xs border-none bg-transparent outline-none w-24"
+                                            placeholder="Mobile No."
+                                            value={newPhone}
+                                            onChange={(e) => {
+                                                setNewPhone(e.target.value);
+                                                setPhoneError(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleUpdatePhone();
+                                                if (e.key === 'Escape') setEditingPhone(false);
+                                            }}
+                                        />
+                                        <button onClick={handleUpdatePhone} disabled={isUpdatingPhone} className="text-xs text-green-600 font-bold hover:scale-110 transition-transform">✓</button>
+                                        <button onClick={() => setEditingPhone(false)} disabled={isUpdatingPhone} className="text-xs text-red-400 font-bold hover:scale-110 transition-transform">×</button>
+                                    </div>
+                                    {phoneError && (
+                                        <div className="absolute top-8 left-0 text-[9px] text-red-500 bg-white px-1 shadow-sm rounded border border-red-100 whitespace-nowrap z-10">
+                                            {phoneError}
+                                        </div>
+                                    )}
                                 </div>
                             )
                         )}
