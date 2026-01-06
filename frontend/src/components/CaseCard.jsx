@@ -15,8 +15,9 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     const [phoneError, setPhoneError] = useState(null);
 
     // Destructure data from the RISKON Engine
-    const { case_id, companyName, phone: initialPhone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING' } = caseData;
+    const { case_id, companyName, phone: initialPhone, amount, pScore, suggestedAction, riskLevel, violationTag, history = [], status = 'PENDING', paidAmount = 0 } = caseData;
     const [phone, setPhone] = useState(initialPhone);
+    const [amountToPay, setAmountToPay] = useState(null); // Custom amount
 
     // Sync state if props change (e.g. from polling)
     React.useEffect(() => {
@@ -153,7 +154,12 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
                         )}
                         <StatusBadge status={status} />
                     </div>
-                    <p className="text-sm font-mono text-gray-600">Outstanding: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>
+                    <p className="text-sm font-mono text-gray-600">Total Due: <span className="font-semibold">₹{amount.toLocaleString()}</span></p>
+                    {paidAmount > 0 && (
+                        <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                            <span className="text-green-600 font-bold">Paid: ₹{paidAmount.toLocaleString()}</span> | <span>Remaining: ₹{(amount - paidAmount).toLocaleString()}</span>
+                        </div>
+                    )}
                     <div className="flex items-center gap-2 mt-1">
                         {history.length > 0 && (
                             <button
@@ -199,12 +205,24 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
                         >
                             📞 Log Call
                         </button>
-                        <button
-                            onClick={() => onPay(caseData)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1 px-3 rounded shadow transition-colors"
-                        >
-                            💳 Pay Now
-                        </button>
+                        <div className="flex flex-col gap-1 items-end">
+                            <div className="flex items-center gap-1 bg-gray-50 border border-indigo-100 rounded px-1">
+                                <span className="text-[10px] text-gray-400">₹</span>
+                                <input
+                                    type="number"
+                                    className="text-[11px] w-16 bg-transparent outline-none font-bold text-indigo-700"
+                                    placeholder={(amount - paidAmount).toString()}
+                                    value={amountToPay === null ? "" : amountToPay}
+                                    onChange={(e) => setAmountToPay(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                onClick={() => onPay(caseData, amountToPay || (amount - paidAmount))}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] uppercase font-bold py-1 px-3 rounded shadow transition-colors"
+                            >
+                                💳 Pay Now
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

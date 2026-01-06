@@ -40,28 +40,47 @@ def process_csv_upload(file_contents: bytes, db: Session):
         
         for index, row in df.iterrows():
             try:
-                # 1. Get or Create Debtor
-                debtor_name = row.get("company_name", "Unknown")
+                # 1. Get or Create/Update Debtor
+                debtor_name = str(row.get("company_name", "Unknown")).strip()
                 credit_score = float(row.get("credit_score", 0.5))
+                phone = str(row.get("phone", "")).strip()
                 
                 debtor = db.query(DebtorDB).filter(DebtorDB.name == debtor_name).first()
                 if not debtor:
-                    phone = str(row.get("phone", ""))
                     debtor = DebtorDB(name=debtor_name, credit_score=credit_score, phone=phone, is_sample=0)
                     db.add(debtor)
                     db.commit()
                     db.refresh(debtor)
+                else:
+                    # Sync info if changed
+                    if credit_score != debtor.credit_score or (phone and phone != debtor.phone):
+                        debtor.credit_score = credit_score
+                        if phone: debtor.phone = phone
+                        db.commit()
                 
-                # 2. Create Invoice
-                new_invoice = InvoiceDB(
-                    debtor_id=debtor.id,
-                    amount=float(row.get("amount", 0)),
-                    age_days=int(row.get("age_days", 0)),
-                    p_score=0.0,      # Will be calculated by Agent later
-                    decision="PENDING" # Needs Allocation
-                )
-                db.add(new_invoice)
-                results["inserted"] += 1
+                # 2. Check for Duplicate Invoice (Avoid double-billing)
+                amount = float(row.get("amount", 0))
+                age_days = int(row.get("age_days", 0))
+                
+                existing_invoice = db.query(InvoiceDB).filter(
+                    InvoiceDB.debtor_id == debtor.id,
+                    InvoiceDB.amount == amount,
+                    InvoiceDB.status != "CLOSED" # Allow re-ingesting if closed? No, usually not.
+                ).first()
+                
+                if not existing_invoice:
+                    new_invoice = InvoiceDB(
+                        debtor_id=debtor.id,
+                        amount=amount,
+                        age_days=age_days,
+                        p_score=0.0,      # Will be calculated by Agent later
+                        decision="PENDING",
+                        status="PENDING"
+                    )
+                    db.add(new_invoice)
+                    results["inserted"] += 1
+                else:
+                    results["errors"].append(f"Row {index}: Duplicate invoice for {debtor_name} rejected.")
                 
             except Exception as row_err:
                 print(f"Row {index} Error: {row_err}")

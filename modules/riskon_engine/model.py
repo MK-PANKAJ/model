@@ -48,10 +48,16 @@ if __name__ == "__main__":
     # Example: Invoice is 30 days old. We called on Day 5 and Day 20.
     engine = RiskonODE(decay_rate=0.03, boost_factor=0.15)
     
+    # Interaction data with weights
+    data = [
+        {"day": 5, "weight": 1.2},  # Good interaction
+        {"day": 20, "weight": 1.5}  # Promise to Pay interaction
+    ]
+    
     current_score = engine.predict_probability(
         initial_prob=0.8,       # Good customer initially
         days_overdue=30,        # 30 days late
-        interaction_days=[5, 20] # We nudged them twice
+        interaction_data=data
     )
     
     print(f"Current Recovery Probability: {current_score:.2%}")

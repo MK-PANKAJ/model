@@ -2,9 +2,17 @@ import json
 import requests
 import asyncio
 import uvicorn
-from twilio.jwt.access_token import AccessToken
-from twilio.jwt.access_token.grants import VoiceGrant
-from twilio.twiml.voice_response import VoiceResponse
+try:
+    from twilio.jwt.access_token import AccessToken
+    from twilio.jwt.access_token.grants import VoiceGrant
+    from twilio.twiml.voice_response import VoiceResponse
+    TWILIO_AVAILABLE = True
+except ImportError:
+    AccessToken = None
+    VoiceGrant = None
+    VoiceResponse = None
+    TWILIO_AVAILABLE = False
+    print("Warning: Twilio SDK not found. Telephony features will be disabled.")
 from fastapi import FastAPI, HTTPException, Request, Form, Response, Depends, status, File, UploadFile
 from pydantic import BaseModel
 import os
@@ -125,11 +133,19 @@ async def ingest_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
 class PaymentRequest(BaseModel):
     case_id: str
-    amount: float
+    amount_to_pay: Optional[float] = None # Optional: Allow partial payment
 
 @app.post("/api/v1/payment/create")
-def generate_payment_link(request: PaymentRequest, current_user: str = Depends(verify_token)):
-    return create_payment_link(request.case_id, request.amount)
+def generate_payment_link(request: PaymentRequest, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    inv_id = int(request.case_id.replace("C-", ""))
+    invoice = db.query(InvoiceDB).filter(InvoiceDB.id == inv_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Case not found")
+        
+    remaining_balance = invoice.amount - invoice.paid_amount
+    amount_to_charge = request.amount_to_pay if request.amount_to_pay else remaining_balance
+    
+    return create_payment_link(request.case_id, invoice.amount, partial_amount=amount_to_charge)
 
 @app.post("/api/v1/analyze")
 def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
@@ -551,6 +567,9 @@ def get_voice_token(current_user: str = Depends(verify_token)):
     Generates a Twilio Access Token for the frontend VOIP client.
     """
     try:
+        if not TWILIO_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Twilio features are currently disabled (SDK not found)")
+            
         # Check if credentials are present
         account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         api_key = os.getenv("TWILIO_API_KEY")
@@ -580,6 +599,9 @@ async def handle_voice_webhook(request: Request):
     """
     Twilio Voice Webhook: Orchestrates the call and enables recording.
     """
+    if not TWILIO_AVAILABLE:
+        return Response(content="<Response><Say>Telephony disabled.</Say></Response>", media_type="application/xml")
+        
     form_data = await request.form()
     number_to_dial = form_data.get("To")
     # case_id can be passed as a custom parameter in the dial connection
@@ -797,15 +819,16 @@ def get_pending_cases(db: Session = Depends(get_db), current_user: str = Depends
             "pScore": inv.p_score,
             "suggestedAction": inv.decision,
             "status": inv.status,
+            "paidAmount": inv.paid_amount,
             "riskLevel": inv.risk_level if inv.risk_level else "UNKNOWN"
         })
     return results
 
 @app.get("/api/v1/payment/success")
-def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
+def payment_success_callback(case_id: str, amount_paid: float = 0.0, db: Session = Depends(get_db)):
     """
     Stripe redirects here after successful payment.
-    Updates invoice status to RESOLVED.
+    Updates invoice paid_amount and status based on balance.
     """
     try:
         # Extract numeric ID from case_id like "C-123"
@@ -814,18 +837,27 @@ def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
         
         if invoice:
             old_status = invoice.status
-            invoice.status = "RESOLVED"
+            # Update cumulative paid amount
+            invoice.paid_amount += amount_paid
+            
+            # Determine new status: Fully Paid or Partially Paid
+            remaining_balance = invoice.amount - invoice.paid_amount
+            new_status = "RESOLVED" if remaining_balance <= 0 else "IN_PROGRESS"
+            
+            invoice.status = new_status
             timestamp = datetime.utcnow().isoformat()
-            invoice.resolved_at = timestamp
+            
+            if new_status == "RESOLVED":
+                invoice.resolved_at = timestamp
             
             # Create status history
             history = StatusHistoryDB(
                 invoice_id=invoice_id,
                 old_status=old_status,
-                new_status="RESOLVED",
+                new_status=new_status,
                 changed_by="SYSTEM",
                 changed_at=timestamp,
-       reason="Payment received via Stripe",
+                reason=f"Payment received: Rs. {amount_paid:,.2f} via Stripe" + (f" (Remaining: Rs. {remaining_balance:,.2f})" if remaining_balance > 0 else " (Full Settlement)"),
                 auto_updated=1
             )
             db.add(history)
@@ -833,7 +865,7 @@ def payment_success_callback(case_id: str, db: Session = Depends(get_db)):
             
             # Redirect to frontend with success banner
             domain = os.getenv("DOMAIN_URL", "https://MK-PANKAJ.github.io/model")
-            return {"status": "success", "redirect": f"{domain}?payment=success&case_id={case_id}"}
+            return {"status": "success", "redirect": f"{domain}?payment=success&case_id={case_id}&paid={amount_paid}&balance={remaining_balance}"}
         else:
             raise HTTPException(status_code=404, detail="Invoice not found")
     except ValueError:

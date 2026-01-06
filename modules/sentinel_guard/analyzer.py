@@ -92,11 +92,19 @@ class Sentinel:
             
         # INTENT CHECK (Basic Rules)
         intent = "GENERAL"
-        ptp_keywords = ["pay", "tomorrow", "friday", "monday", "promise", "send", "payment", "clear"]
-        # Allow PTP detection even if sentiment is slightly negative (e.g. apologetic "sorry for the delay")
-        if any(word in text_lower for word in ptp_keywords) and sentiment_score > -0.5:
-            intent = "PTP"
-        elif "dispute" in text_lower or "wrong" in text_lower:
+        ptp_keywords = ["pay", "tomorrow", "friday", "monday", "promise", "send", "payment", "clear", "settle", "cheque", "transfer", "remit"]
+        dispute_keywords = ["dispute", "wrong", "mistake", "error", "charged", "incorrect", "already paid", "never received"]
+        
+        # Lowercase for matching
+        text_lower = text_content.lower()
+        
+        if any(word in text_lower for word in ptp_keywords):
+            # Allow PTP even with slightly negative sentiment (e.g. frustrated but paying)
+            if sentiment_score > -0.7:
+                intent = "PTP"
+        
+        if any(word in text_lower for word in dispute_keywords):
+            # Dispute usually overrides GENERAL
             intent = "DISPUTE"
             
         return {

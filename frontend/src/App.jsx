@@ -227,7 +227,7 @@ function App() {
     }
   };
 
-  const handlePayment = async (caseData) => {
+  const handlePayment = async (caseData, amountToPay) => {
     const PAYMENT_URL = API.PAYMENT;
 
     try {
@@ -239,7 +239,7 @@ function App() {
         },
         body: JSON.stringify({
           case_id: caseData.case_id,
-          amount: caseData.amount
+          amount_to_pay: amountToPay
         })
       });
 
@@ -469,7 +469,7 @@ function App() {
               />
               <p className="text-[10px] text-gray-400 mt-2">This is your internal identifier. Outgoing calls use the company's Twilio Number.</p>
             </div>
-            Barb            <div className="flex justify-end">
+            <div className="flex justify-end">
               <button
                 onClick={() => setShowSettings(false)}
                 className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition"

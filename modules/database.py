@@ -31,7 +31,7 @@ class DebtorDB(Base):
 class InvoiceDB(Base):
     __tablename__ = "invoices"
     id = Column(Integer, primary_key=True, index=True)
-    debtor_id = Column(Integer, ForeignKey("debtors.id"))
+    debtor_id = Column(Integer, ForeignKey("debtors.id"), index=True)
     amount = Column(Float)
     age_days = Column(Integer)
     # AI Scores
@@ -41,6 +41,7 @@ class InvoiceDB(Base):
     risk_level = Column(String, default="UNKNOWN")
     # Payment Status
     status = Column(String, default="PENDING")  # PENDING | IN_PROGRESS | UNDER_REVIEW | RESOLVED | CLOSED | ESCALATED
+    paid_amount = Column(Float, default=0.0) # Track partial payments
     resolved_at = Column(String, nullable=True)  # ISO timestamp when resolved
     closed_at = Column(String, nullable=True)  # ISO timestamp when closed
     closed_reason = Column(String, nullable=True)  # Reason for closing
@@ -48,7 +49,7 @@ class InvoiceDB(Base):
 class InteractionLogDB(Base):
     __tablename__ = "interaction_logs"
     id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), index=True)
     created_at = Column(String)  # ISO timestamp
     interaction_text = Column(String)  # What the agent said/wrote
     risk_level = Column(String, default="UNKNOWN")  # Sentinel result
@@ -59,7 +60,7 @@ class InteractionLogDB(Base):
 class StatusHistoryDB(Base):
     __tablename__ = "status_history"
     id = Column(Integer, primary_key=True, index=True)
-    invoice_id = Column(Integer, ForeignKey("invoices.id"))
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), index=True)
     old_status = Column(String)
     new_status = Column(String)
     changed_by = Column(String)  # username or "SYSTEM"
