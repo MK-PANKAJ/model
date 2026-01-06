@@ -238,7 +238,12 @@ function App() {
         )}
 
         {analyzedCases.map((c) => (
-          <CaseCard key={c.case_id} caseData={c} onPay={handlePayment} />
+          <CaseCard
+            key={c.case_id}
+            caseData={c}
+            onPay={handlePayment}
+            onLogCall={() => fetchCases(token)}
+          />
         ))}
       </div>
     </div>
