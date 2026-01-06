@@ -9,6 +9,7 @@ const CaseCard = ({ caseData, onPay, onLogCall, onCall }) => {
     const [showLogModal, setShowLogModal] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);
+    const [editingPhone, setEditingPhone] = useState(false);
     const [newPhone, setNewPhone] = useState('');
     const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
     const [phoneError, setPhoneError] = useState(null);
