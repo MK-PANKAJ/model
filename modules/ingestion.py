@@ -15,16 +15,25 @@ def process_csv_upload(file_contents: bytes, db: Session):
         # Standardize Columns (Lowercase, strip spaces)
         df.columns = [c.lower().strip() for c in df.columns]
         
-        # AUTO-CLEANUP: Remove all sample data when real data is uploaded
-        print("[*] Removing sample data...")
+        # AUTO-CLEANUP: Remove ONLY sample data (is_sample=1) when real data is uploaded
+        # SAFETY: Real data (is_sample=0) is NEVER deleted by this logic
+        print("[*] Checking for sample data to remove...")
         sample_debtors = db.query(DebtorDB).filter(DebtorDB.is_sample == 1).all()
-        for sample_debtor in sample_debtors:
-            # Delete all invoices for this sample debtor
-            db.query(InvoiceDB).filter(InvoiceDB.debtor_id == sample_debtor.id).delete()
-            # Delete the sample debtor
-            db.delete(sample_debtor)
-        db.commit()
-        print(f"[OK] Removed {len(sample_debtors)} sample debtors")
+        
+        if len(sample_debtors) > 0:
+            print(f"[CLEANUP] Found {len(sample_debtors)} sample debtors (is_sample=1):")
+            for sample_debtor in sample_debtors:
+                print(f"  - Removing: {sample_debtor.name} (ID: {sample_debtor.id}, is_sample: {sample_debtor.is_sample})")
+                # Delete all invoices for this sample debtor
+                invoice_count = db.query(InvoiceDB).filter(InvoiceDB.debtor_id == sample_debtor.id).count()
+                db.query(InvoiceDB).filter(InvoiceDB.debtor_id == sample_debtor.id).delete()
+                # Delete the sample debtor
+                db.delete(sample_debtor)
+                print(f"    -> Deleted {invoice_count} invoice(s)")
+            db.commit()
+            print(f"[OK] Sample data cleanup complete")
+        else:
+            print("[OK] No sample data found (all existing data is real)")
         
         results = {"total": 0, "inserted": 0, "errors": []}
         results["total"] = len(df)
