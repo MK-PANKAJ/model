@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+import os
 
 # Import our Logic Modules
 from modules.riskon_engine.model import RiskonODE
@@ -9,12 +10,11 @@ from modules.allocation_core.agent import AllocationAgent
 from modules.sentinel_guard.analyzer import Sentinel
 
 # Import Database Modules
-from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB
+from modules.database import Base, engine, get_db, InvoiceDB, DebtorDB, UserDB, SessionLocal
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, File, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
-from modules.security import verify_password, create_access_token, verify_token
-from modules.security import verify_password, create_access_token, verify_token
+from modules.security import verify_password, create_access_token, verify_token, get_password_hash
 from modules.ingestion import process_csv_upload
 from modules.payments import create_payment_link
 
@@ -40,7 +40,6 @@ allocation_agent = AllocationAgent(risk_engine)
 sentinel = Sentinel()
 
 # --- STARTUP: AUTO-CREATE ADMIN (MVP ONLY) ---
-from modules.security import get_password_hash
 @app.on_event("startup")
 def create_default_admin():
     print("--- STARTUP: Initializing Admin User ---")
