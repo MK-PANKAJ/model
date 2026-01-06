@@ -14,8 +14,8 @@ recoverai.db
 frontend/dist
 frontend/node_modules
 tests
-Dockerfile
-cloudbuild.yaml
+!Dockerfile
+!cloudbuild.yaml
 docker-compose.yml
 deploy_gcp_full.sh
 fix_permissions.sh
