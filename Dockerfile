@@ -1,24 +1,16 @@
-
 # Use an official lightweight Python image.
-# https://hub.docker.com/_/python
-# Use an official standard Python image (full version) to include all C-libs/tools
-# needed for Pandas, Scipy, and Google Cloud SDKs.
-FROM python:3.10
+FROM python:3.11-slim
 
-# Allow statements and log messages to immediately appear in the Knative logs
+# Allow statements and log messages to immediately appear in the logs
 ENV PYTHONUNBUFFERED True
 
 # Copy local code to the container image.
-ENV APP_HOME /app
-WORKDIR $APP_HOME
+WORKDIR /app
 COPY . ./
 
-# Install production dependencies.
+# Install dependencies.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run the web service on container startup. Here we use the gunicorn
-# webserver, with one worker process and 8 threads.
-# For environments with multiple CPU cores, increase the number of workers
-# to be equal to the cores available.
-# Timeout is set to 0 to disable the timeouts of the workers to allow Cloud Run to handle instance scaling.
-CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 
+# Run the web service on container startup.
+# Cloud Run sets the PORT environment variable.
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
