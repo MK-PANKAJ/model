@@ -301,7 +301,8 @@ function App() {
       const call = await device.connect({
         params: {
           To: debtorPhone,
-          case_id: caseId // Send Case ID to Backend for Analysis linking
+          case_id: caseId,
+          caller_id: agentSettings.callerId // Pass dynamic caller ID from settings
         }
       });
 

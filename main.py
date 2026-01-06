@@ -9,7 +9,8 @@ from fastapi import FastAPI, HTTPException, Request, Form, Response, Depends, st
 from pydantic import BaseModel
 import os
 from datetime import datetime
-from typing import List, Optional
+from dotenv import load_dotenv
+load_dotenv() # Load variables from .env if present
 
 # Import our Logic Modules
 from modules.riskon_engine.model import RiskonODE
@@ -581,8 +582,9 @@ async def handle_voice_webhook(request: Request):
     """
     form_data = await request.form()
     number_to_dial = form_data.get("To")
-    # case_id can be passed as a custom parameter in the dial connection
+    # case_id and caller_id can be passed as a custom parameter in the dial connection
     case_id = form_data.get("case_id", "UNKNOWN")
+    dynamic_caller_id = form_data.get("caller_id")
 
     response = VoiceResponse()
     
@@ -595,7 +597,7 @@ async def handle_voice_webhook(request: Request):
     # Connect to Debtor + Enable Recording
     # recording_status_callback will trigger our analysis loop
     dial = response.dial(
-        caller_id=os.getenv("TWILIO_CALLER_ID", "+1234567890"),
+        caller_id=dynamic_caller_id or os.getenv("TWILIO_CALLER_ID", "+1234567890"),
         record="record-from-ringing-dual",
         recording_status_callback=f"{os.getenv('DOMAIN_URL')}/api/v1/telephony/recording_complete?case_id={case_id}",
         recording_status_callback_event="completed"
@@ -626,8 +628,10 @@ async def handle_recording_complete(
     print(f"[ANALYSIS] Triggered for Case {case_id}. Audio: {recording_url}")
     
     try:
-        # A. Download Audio (Twilio recordings are public by default unless configured otherwise)
-        audio_resp = requests.get(recording_url)
+        # A. Download Audio (Twilio recordings require auth if private)
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        audio_resp = requests.get(recording_url, auth=(account_sid, auth_token))
         audio_content = audio_resp.content
         
         # B. Analyze with Sentinel (Gemini Multimodal)
