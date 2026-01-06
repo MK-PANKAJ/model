@@ -143,12 +143,10 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: st
         case.history_logs
     )
 
-    # --- SENTINEL COMPLIANCE CHECK ---
-    # Simulate a transcript for compliance scanning
-    # In production, this would be real interaction text
-    simulated_transcript = f"Regarding outstanding debt of {case.amount} from {case.company_name}"
-    compliance_result = sentinel.scan_interaction(simulated_transcript)
-    risk_level = compliance_result.get("risk_level", "UNKNOWN")
+    # --- SENTINEL COMPLIANCE CHECK (REMOVED FROM INITIAL ANALYSIS) ---
+    # We only run compliance when an actual interaction log is created.
+    # Initially we assume SAFE unless imported differently.
+    risk_level = invoice_risk_level = "SAFE"
 
     # --- SAVE TO DB (PERSISTENCE) ---
     # 1. Check if debtor exists, else create
@@ -159,24 +157,46 @@ def analyze_case(case: CaseData, db: Session = Depends(get_db), current_user: st
         db.commit()
         db.refresh(debtor)
 
-    # 2. Save the Analysis Record
-    db_invoice = InvoiceDB(
-        debtor_id=debtor.id,
-        amount=case.amount,
-        age_days=case.age_days,
-        p_score=raw_score,
-        decision=decision["action"],
-        risk_level=risk_level
-    )
-    db.add(db_invoice)
-    db.commit()
+    # 2. UPDATE EXISTING INVOICE INSTEAD OF CREATING NEW
+    existing_invoice = None
+    try:
+        # Check if case_id is numeric (from database) or a string like "C-123"
+        inv_id_str = str(case.case_id).replace("C-", "")
+        if inv_id_str.isdigit():
+            inv_id = int(inv_id_str)
+            existing_invoice = db.query(InvoiceDB).filter(InvoiceDB.id == inv_id).first()
+    except Exception:
+        pass
+
+    if existing_invoice:
+        # Update Existing
+        existing_invoice.p_score = raw_score
+        existing_invoice.decision = decision["action"]
+        existing_invoice.risk_level = risk_level
+        existing_invoice.status = "IN_PROGRESS" # Mark as analyzed
+        db.commit()
+        db_invoice = existing_invoice
+    else:
+        # Create New (Fallback for manual entries not yet in DB)
+        db_invoice = InvoiceDB(
+            debtor_id=debtor.id,
+            amount=case.amount,
+            age_days=case.age_days,
+            p_score=raw_score,
+            decision=decision["action"],
+            risk_level=risk_level,
+            status="IN_PROGRESS"
+        )
+        db.add(db_invoice)
+        db.commit()
+        db.refresh(db_invoice)
     
     return {
-        "case_id": case.case_id,
+        "case_id": f"C-{db_invoice.id}",
         "riskon_score": round(raw_score, 4),
         "allocation_decision": decision,
         "compliance": {"risk_level": risk_level},
-        "db_status": "SAVED"
+        "db_status": "UPDATED" if existing_invoice else "SAVED"
     }
 
 @app.post("/api/v1/sentinel/audit")

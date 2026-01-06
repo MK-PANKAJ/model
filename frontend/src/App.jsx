@@ -96,28 +96,32 @@ function App() {
       // Fetch fresh list from DB first (Self-Healing)
       await fetchCases(token);
 
-      // We iterate over the REAL cases now
-      for (let c of analyzedCases) {
-        if (c.pScore) continue; // Skip already analyzed
+      // Map valid cases to fetch promises
+      const analysisPromises = analyzedCases
+        .filter(c => !c.pScore) // Skip already analyzed
+        .map(c => {
+          const payload = {
+            case_id: c.case_id.replace("C-", ""), // Send ID only
+            company_name: c.companyName,
+            amount: c.amount,
+            initial_score: c.initial_score,
+            age_days: c.age_days,
+            history_logs: (c.history || []).map(h => h.id || h) // Handle both objects and raw day IDs
+          };
 
-        const payload = {
-          case_id: c.case_id.replace("C-", ""), // Send ID only
-          company_name: c.companyName,
-          amount: c.amount,
-          initial_score: c.initial_score,
-          age_days: c.age_days,
-          history_logs: c.history
-        };
-
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
+          return fetch(API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
         });
-      }
+
+      // Execute all in parallel
+      await Promise.all(analysisPromises);
+
       // Reload to see results
       await fetchCases(token);
 

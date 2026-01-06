@@ -52,6 +52,7 @@ class InteractionLogDB(Base):
     created_at = Column(String)  # ISO timestamp
     interaction_text = Column(String)  # What the agent said/wrote
     risk_level = Column(String, default="UNKNOWN")  # Sentinel result
+    intent = Column(String, default="GENERAL") # PTP, DISPUTE, etc.
     sentiment_score = Column(Float, default=0.0)
     violation_flags = Column(String, default="[]")  # JSON as string for SQLite compatibility
 
