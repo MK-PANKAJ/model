@@ -19,7 +19,7 @@ class Sentinel:
         if VERTEX_AVAILABLE and self.project_id:
             try:
                 vertexai.init(project=self.project_id, location="us-central1")
-                self.model = GenerativeModel("gemini-pro")
+                self.model = GenerativeModel("gemini-1.5-flash")
                 print("Sentinel: Vertex AI Gemini Pro Initialized.")
             except Exception as e:
                 print(f"Sentinel: Vertex AI Init Failed ({e}). Using VADER fallback.")
