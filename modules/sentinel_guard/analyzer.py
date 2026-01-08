@@ -2,7 +2,7 @@ import json
 import os
 try:
     import vertexai
-    from vertexai.generative_models import GenerativeModel, Part
+    from vertexai.generative_models import GenerativeModel
     VERTEX_AVAILABLE = True
 except ImportError:
     VERTEX_AVAILABLE = False
@@ -43,17 +43,24 @@ class Sentinel:
         if self.model:
             try:
                 prompt = f"""
-                Analyze the following debt collection transcript as a Compliance Officer.
-                Check for harassment, threats, or FDCPA violations.
-                Also, identify if the debtor made a "Promise to Pay" (PTP).
+                You are an expert Collections Analyst. Your job is to determine the TRUE INTENT of the debtor, even if they use slang, typos, or indirect language.
+                
                 Transcript: "{text_content}"
+                
+                1. **Analyze Intent (Semantic Meaning)**:
+                   - "PTP" (Promise to Pay): Explicit commitment to pay specific amount or on specific date.
+                   - "REFUSAL": Any indication they will NOT pay, cannot pay, have no money, "broke", "not happening", or are refusing to engage.
+                   - "DISPUTE": Claims the debt is wrong, already paid, or fraud.
+                   - "GENERAL": Asking for info, greeting, or irrelevant chatter.
+                
+                2. **Check for Compliance Risks** (FDCPA): Threats, harassment, abuse.
                 
                 Respond ONLY with valid JSON:
                 {{
                     "risk_level": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
                     "violation_flags": ["list of specific issues found"],
                     "intent": "PTP" | "DISPUTE" | "REFUSAL" | "GENERAL",
-                    "reasoning": "brief explanation"
+                    "reasoning": "brief explanation of why this intent was chosen based on semantic meaning"
                 }}
                 """
                 response = self.model.generate_content(prompt)
@@ -94,6 +101,7 @@ class Sentinel:
         intent = "GENERAL"
         ptp_keywords = ["pay", "tomorrow", "friday", "monday", "promise", "send", "payment", "clear", "settle", "cheque", "transfer", "remit"]
         dispute_keywords = ["dispute", "wrong", "mistake", "error", "charged", "incorrect", "already paid", "never received"]
+        refusal_keywords = ["not pay", "won't pay", "refuse", "not going to pay", "can't pay", "no money"]
         
         # Lowercase for matching
         text_lower = text_content.lower()
@@ -102,6 +110,10 @@ class Sentinel:
             # Allow PTP even with slightly negative sentiment (e.g. frustrated but paying)
             if sentiment_score > -0.7:
                 intent = "PTP"
+        
+        if any(word in text_lower for word in refusal_keywords):
+            intent = "REFUSAL"
+            sentiment_score = -0.9 # Force strong negative sentiment
         
         if any(word in text_lower for word in dispute_keywords):
             # Dispute usually overrides GENERAL
@@ -143,8 +155,8 @@ class Sentinel:
             
             # Send audio bytes directly to Gemini
             response = self.model.generate_content([
-                Part.from_text(prompt),
-                Part.from_data(data=audio_content, mime_type=mime_type)
+                prompt,
+                {"mime_type": mime_type, "data": audio_content}
             ])
             
             raw_json = response.text.replace("```json", "").replace("```", "")

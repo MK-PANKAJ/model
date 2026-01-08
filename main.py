@@ -416,11 +416,16 @@ async def analyze_audio_interaction(
         for log in all_logs:
             day = (log.id * 7) % (invoice.age_days + 1) 
             # Determine weight: Sentiment (-1 to 1) + Intent Bonus
-            weight = 1.0 + log.sentiment_score
-            if log.intent == "PTP": weight += 1.0
+            # Base 0.2 for contact (DCA theory) + Sentiment Impact
+            weight = 0.2 + log.sentiment_score 
+            
+            if log.intent == "PTP": weight += 1.5
+            if log.intent == "REFUSAL": weight -= 4.0 # Massive Penalty for Refusal
+            if log.intent == "DISPUTE": weight -= 1.0
+            
             if log.risk_level == "CRITICAL": weight -= 2.0
             
-            interaction_data.append({"day": day, "weight": max(0.0, weight)})
+            interaction_data.append({"day": day, "weight": weight})
 
         invoice.p_score = risk_engine.predict_probability(
             initial_prob=debtor.credit_score,
