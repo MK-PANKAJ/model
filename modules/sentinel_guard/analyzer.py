@@ -2,7 +2,7 @@ import json
 import os
 try:
     import vertexai
-    from vertexai.generative_models import GenerativeModel
+    from vertexai.generative_models import GenerativeModel, Part
     VERTEX_AVAILABLE = True
 except ImportError:
     VERTEX_AVAILABLE = False
@@ -43,24 +43,26 @@ class Sentinel:
         if self.model:
             try:
                 prompt = f"""
-                You are an expert Collections Analyst. Your job is to determine the TRUE INTENT of the debtor, even if they use slang, typos, or indirect language.
+                You are an expert Collections Analyst. 
+                Task 1: **Speaker Identification**: Distinguish between the 'Agent' (Collector) and 'Debtor' (Client).
                 
                 Transcript: "{text_content}"
                 
-                1. **Analyze Intent (Semantic Meaning)**:
-                   - "PTP" (Promise to Pay): Explicit commitment to pay specific amount or on specific date.
-                   - "REFUSAL": Any indication they will NOT pay, cannot pay, have no money, "broke", "not happening", or are refusing to engage.
-                   - "DISPUTE": Claims the debt is wrong, already paid, or fraud.
-                   - "GENERAL": Asking for info, greeting, or irrelevant chatter.
+                Task 2: **Analyze DEBTOR Intent** (Ignore Agent's words for this, focus ONLY on the Debtor's response):
+                   - "PTP": Debtor explicitly promises to pay.
+                   - "REFUSAL": Debtor implies non-payment (e.g. "no money", "can't", "broke", "not happening", "do your worst").
+                   - "DISPUTE": Debtor claims error or fraud.
+                   - "GENERAL": Other/Unknown.
                 
-                2. **Check for Compliance Risks** (FDCPA): Threats, harassment, abuse.
+                Task 3: **Compliance Check**: Did the AGENT make threats/harassment?
                 
                 Respond ONLY with valid JSON:
                 {{
+                    "conversation_summary": "Brief summary of who said what",
                     "risk_level": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
                     "violation_flags": ["list of specific issues found"],
                     "intent": "PTP" | "DISPUTE" | "REFUSAL" | "GENERAL",
-                    "reasoning": "brief explanation of why this intent was chosen based on semantic meaning"
+                    "reasoning": "Explain why this intent was chosen based on Debtor's words"
                 }}
                 """
                 response = self.model.generate_content(prompt)
@@ -155,8 +157,8 @@ class Sentinel:
             
             # Send audio bytes directly to Gemini
             response = self.model.generate_content([
-                prompt,
-                {"mime_type": mime_type, "data": audio_content}
+                Part.from_text(prompt),
+                Part.from_data(data=audio_content, mime_type=mime_type)
             ])
             
             raw_json = response.text.replace("```json", "").replace("```", "")
